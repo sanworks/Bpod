@@ -82,7 +82,6 @@ byte SoftEvent = 0; // What soft event code just happened
 byte CommandByte = 0;  // Op code to specify handling of an incoming USB serial message
 byte VirtualEventTarget = 0; // Op code to specify which virtual event type (Port, BNC, etc)
 byte VirtualEventData = 0; // State of target
-byte BrokenBytes[4] = {0}; // Outgoing bytes (used in BreakLong function)
 int nWaves = 0; // number of scheduled waves registered
 byte CurrentWave = 0; // Scheduled wave currently in use
 byte LowByte = 0; // LowByte through FourthByte are used for reading bytes that will be combined to 16 and 32 bit integers
@@ -190,13 +189,13 @@ void handler() {
         SecondByte = SerialUSB.read();
         switch (LowByte) {
           case 'B': // Read BNC input line
-            ThirdByte = digitalRead(BncInputLines[SecondByte]);
+            ThirdByte = digitalReadDirect(BncInputLines[SecondByte]);
           break;
           case 'P': // Read port digital input line
-            ThirdByte = digitalRead(PortDigitalInputLines[SecondByte]);
+            ThirdByte = digitalReadDirect(PortDigitalInputLines[SecondByte]);
           break;
           case 'W': // Read wire digital input line
-            ThirdByte = digitalRead(WireDigitalInputLines[SecondByte]);
+            ThirdByte = digitalReadDirect(WireDigitalInputLines[SecondByte]);
           break;
         }
         SerialUSB.write(ThirdByte);
@@ -327,6 +326,7 @@ void handler() {
       CurrentState = 0;
       nTotalEvents = 0;
       nEvents = 0;
+      SoftEvent = 254; // No event
       MatrixFinished = false;
       // Reset event counters
       for (int x = 0; x < 5; x++) {
@@ -335,19 +335,19 @@ void handler() {
       // Read initial state of sensors      
       for (int x = 0; x < 8; x++) {
         if (PortInputsEnabled[x] == 1) { 
-          PortInputLineValue[x] = digitalRead(PortDigitalInputLines[x]); // Read each photogate's current state into an array
+          PortInputLineValue[x] = digitalReadDirect(PortDigitalInputLines[x]); // Read each photogate's current state into an array
           if (PortInputLineValue[x] == HIGH) {PortInputLineLastKnownStatus[x] = HIGH;} else {PortInputLineLastKnownStatus[x] = LOW;} // Update last known state of input line
         } else {
           PortInputLineLastKnownStatus[x] = LOW; PortInputLineValue[x] = LOW;
         } 
       }
       for (int x = 0; x < 2; x++) {
-        BNCInputLineValue[x] = digitalRead(BncInputLines[x]);
+        BNCInputLineValue[x] = digitalReadDirect(BncInputLines[x]);
         if (BNCInputLineValue[x] == HIGH) {BNCInputLineLastKnownStatus[x] = true;} else {BNCInputLineLastKnownStatus[x] = false;}
       }
       for (int x = 0; x < 4; x++) {
         if (WireInputsEnabled[x] == 1) { 
-          WireInputLineValue[x] = digitalRead(WireDigitalInputLines[x]);
+          WireInputLineValue[x] = digitalReadDirect(WireDigitalInputLines[x]);
           if (WireInputLineValue[x] == HIGH) {WireInputLineLastKnownStatus[x] = true;} else {WireInputLineLastKnownStatus[x] = false;}
         }
       }
@@ -379,21 +379,20 @@ void handler() {
     OverrideFlag = false;
     nCurrentEvents = 0;
     CurrentEvent[0] = 254; // Event 254 = No event
-    SoftEvent = 254;
     CurrentTime++;
          if (OverrideFlag == false) {
            // Refresh state of sensors and inputs
            for (int x = 0; x < 8; x++) {
              if (PortInputsEnabled[x] == 1) { 
-              PortInputLineValue[x] = digitalRead(PortDigitalInputLines[x]);
+              PortInputLineValue[x] = digitalReadDirect(PortDigitalInputLines[x]);
              }
           }
           for (int x = 0; x < 2; x++) {
-            BNCInputLineValue[x] = digitalRead(BncInputLines[x]);
+            BNCInputLineValue[x] = digitalReadDirect(BncInputLines[x]);
           }
           for (int x = 0; x < 4; x++) {
             if (WireInputsEnabled[x] == 1) { 
-              WireInputLineValue[x] = digitalRead(WireDigitalInputLines[x]);
+              WireInputLineValue[x] = digitalReadDirect(WireDigitalInputLines[x]);
             }
           }
          }
@@ -439,7 +438,8 @@ void handler() {
          }
           // Map soft events to event code scheme
           if (SoftEvent < 254) {
-            CurrentEvent[nCurrentEvents] = SoftEvent + Ev; nCurrentEvents++;
+            CurrentEvent[nCurrentEvents] = SoftEvent + Ev - 1; nCurrentEvents++;
+            SoftEvent = 254;
           }
           Ev = 40;
           // Determine if a global timer expired
@@ -524,28 +524,13 @@ void handler() {
       SerialUSB.write(1); // Read one event
       SerialUSB.write(255); // Send Matrix-end code
       // Send trial-start timestamp (in milliseconds, basically immune to microsecond 32-bit timer wrap-over)
-          Num2Break = MatrixStartTimeMillis-SessionStartTime;
-          breakLong(Num2Break);
-          SerialUSB.write(BrokenBytes[0]);
-          SerialUSB.write(BrokenBytes[1]);
-          SerialUSB.write(BrokenBytes[2]);
-          SerialUSB.write(BrokenBytes[3]);
+          SerialWriteLong(MatrixStartTimeMillis-SessionStartTime);
       // Send matrix start timestamp (in microseconds)
-          breakLong(MatrixStartTime);
-          SerialUSB.write(BrokenBytes[0]);
-          SerialUSB.write(BrokenBytes[1]);
-          SerialUSB.write(BrokenBytes[2]);
-          SerialUSB.write(BrokenBytes[3]);
+      SerialWriteLong(MatrixStartTime);
         if (nEvents > 9999) {nEvents = 10000;}
-          SerialUSB.write(lowByte(nEvents));
-          SerialUSB.write(highByte(nEvents));
+        SerialWriteShort(nEvents);
         for (int x = 0; x < nEvents; x++) {
-          Num2Break = TimeStamps[x];
-          breakLong(Num2Break);
-          SerialUSB.write(BrokenBytes[0]);
-          SerialUSB.write(BrokenBytes[1]);
-          SerialUSB.write(BrokenBytes[2]);
-          SerialUSB.write(BrokenBytes[3]);
+          SerialWriteLong(TimeStamps[x]);
         }
         updateStatusLED(0);
         updateStatusLED(2);
@@ -566,14 +551,6 @@ unsigned long ReadLong() {
   FourthByte = SerialUSB.read();
   LongInt =  (unsigned long)(((unsigned long)FourthByte << 24) | ((unsigned long)ThirdByte << 16) | ((unsigned long)SecondByte << 8) | ((unsigned long)LowByte));
   return LongInt;
-}
-
-void breakLong(unsigned long LongInt2Break) {
-  //BrokenBytes is a global array for the output of long int break operations
-  BrokenBytes[3] = (byte)(LongInt2Break >> 24);
-  BrokenBytes[2] = (byte)(LongInt2Break >> 16);
-  BrokenBytes[1] = (byte)(LongInt2Break >> 8);
-  BrokenBytes[0] = (byte)LongInt2Break;
 }
 
 void SetBNCOutputLines(int BNCState) {
@@ -736,4 +713,20 @@ void manualOverrideOutputs() {
  void digitalWriteDirect(int pin, boolean val){
   if(val) g_APinDescription[pin].pPort -> PIO_SODR = g_APinDescription[pin].ulPin;
   else    g_APinDescription[pin].pPort -> PIO_CODR = g_APinDescription[pin].ulPin;
+}
+
+void SerialWriteLong(unsigned long num) {
+  SerialUSB.write((byte)num); 
+  SerialUSB.write((byte)(num >> 8)); 
+  SerialUSB.write((byte)(num >> 16)); 
+  SerialUSB.write((byte)(num >> 24));
+}
+
+void SerialWriteShort(word num) {
+  SerialUSB.write((byte)num); 
+  SerialUSB.write((byte)(num >> 8)); 
+}
+
+byte digitalReadDirect(int pin){
+  return !!(g_APinDescription[pin].pPort -> PIO_PDSR & g_APinDescription[pin].ulPin);
 }

@@ -12,7 +12,9 @@ BpodSystem.GUIHandles.BonsaiConnectStatus = uicontrol('Style', 'text', 'String',
 BpodSystem.GUIHandles.BonsaiIPEdit = uicontrol('Style', 'edit', 'String', 'localhost', 'Position', [75 155 150 30], 'FontSize', 14, 'FontWeight', 'bold', 'ForegroundColor', 'k', 'BackgroundColor', [.9 .9 .9]);
 BpodSystem.GUIHandles.BonsaiPortEdit = uicontrol('Style', 'edit', 'String', '11235', 'Position', [75 115 150 30], 'FontSize', 14, 'FontWeight', 'bold', 'ForegroundColor', 'k', 'BackgroundColor', [.9 .9 .9]);
 BpodSystem.GUIHandles.BonsaiAutoConnectSelector = uicontrol('Style', 'checkbox', 'String', '', 'Position', [255 28 15 15], 'BackgroundColor', [.9 .9 .9], 'Callback', @SetBonsaiAutoConnect);
-set(BpodSystem.GUIHandles.BonsaiAutoConnectSelector, 'value', BpodSystem.SystemSettings.BonsaiAutoConnect);
+if isfield(BpodSystem.SystemSettings, 'BonsaiAutoConnect')
+    set(BpodSystem.GUIHandles.BonsaiAutoConnectSelector, 'value', BpodSystem.SystemSettings.BonsaiAutoConnect);
+end
 if BpodSystem.BonsaiSocket.Connected == 1 % Replace with actual detection of remote connection
     set(BpodSystem.GUIHandles.BonsaiConnectStatus, 'String', 'Connected', 'ForegroundColor', 'g');
     set(BpodSystem.GUIHandles.BonsaiConnectButton, 'CData', BpodSystem.GUIHandles.BonsaiDisconnectButtonGFX);

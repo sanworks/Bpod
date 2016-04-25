@@ -1,8 +1,8 @@
 %{
 ----------------------------------------------------------------------------
 
-This file is part of the Bpod Project
-Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
+This file is part of the Sanworks Bpod repository
+Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -18,14 +18,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
 function PsychToolboxSound
-% This protocol demonstrates precise high fidelity sound. 
-% Written by Josh Sanders, 10/2014.
+% This protocol demonstrates a 2AFC task using PsychToolbox to generate sound stimuli.
+% Subjects initialize each trial with a poke into port 2. After a delay, a tone plays.
+% Subjects are rewarded for responding left for low-pitch tones, and right for high.
+% Written by Josh Sanders, 4/2016
 %
 % SETUP
 % You will need:
-% - Ubuntu 14.XX with the -lowlatency package installed
-% - ASUS Xonar DX 7-channel sound card installed
-% - PsychToolbox installed
+% - Windows 7 or Ubuntu 14.XX with the -lowlatency package installed
+% - ASUS Xonar DX 7-channel sound card installed. If using Windows, install
+%   the drivers from the ASUS website, and configure the latency to 1ms in the ASUS config panel.
+% - PsychToolbox 3 installed
 % - The Xonar DX comes with an RCA cable. Use an RCA to BNC adapter to
 %    connect channel 3 to one of Bpod's BNC input channels for a record of the
 %    exact time each sound played.
@@ -35,21 +38,21 @@ global BpodSystem
 %% Define parameters
 S = BpodSystem.ProtocolSettings; % Load settings chosen in launch manager into current workspace as a struct called S
 if isempty(fieldnames(S))  % If settings file was an empty struct, populate struct with default settings
-    S.GUI.TrainingLevel = 2;
-    S.GUIMeta.TrainingLevel.Style = 'popupmenu';
+    S.GUI.TrainingLevel = 2; % Configurable reward condition schemes. 'BothCorrect' rewards either side.
+    S.GUIMeta.TrainingLevel.Style = 'popupmenu'; % the GUIMeta field is used by the ParameterGUI plugin to customize UI objects.
     S.GUIMeta.TrainingLevel.String = {'BothCorrect', '2AFC'};
     S.GUI.SoundDuration = 0.5; % Duration of sound (s)
-    S.GUI.SinWaveFreqLeft = 500;
-    S.GUI.SinWaveFreqRight = 2000;
-    S.GUI.RewardAmount = 5;
-    S.GUI.StimulusDelayDuration = 0;
-    S.GUI.TimeForResponse = 5;
-    S.GUI.TimeoutDuration = 2;
-    S.GUI.PunishSound = 1;
+    S.GUI.SinWaveFreqLeft = 500; % Frequency of left cue
+    S.GUI.SinWaveFreqRight = 2000; % Frequency of right cue
+    S.GUI.RewardAmount = 5; % in ul
+    S.GUI.StimulusDelayDuration = 0; % Seconds before stimulus plays on each trial
+    S.GUI.TimeForResponse = 5; % Seconds after stimulus sampling for a response
+    S.GUI.PunishTimeoutDuration = 2; % Seconds to wait on errors before next trial can start
+    S.GUI.PunishSound = 1; % if 1, plays a white noise pulse on error. if 0, no sound is played.
     S.GUIMeta.PunishSound.Style = 'checkbox';
-    S.GUIPanels.Task = {'TrainingLevel', 'RewardAmount', 'PunishSound'};
+    S.GUIPanels.Task = {'TrainingLevel', 'RewardAmount', 'PunishSound'}; % GUIPanels organize the parameters into groups.
     S.GUIPanels.Sound = {'SinWaveFreqLeft', 'SinWaveFreqRight', 'SoundDuration'};
-    S.GUIPanels.Time = {'StimulusDelayDuration', 'TimeForResponse', 'TimeoutDuration'};
+    S.GUIPanels.Time = {'StimulusDelayDuration', 'TimeForResponse', 'PunishTimeoutDuration'};
 end
 
 % Initialize parameter GUI plugin
@@ -61,10 +64,13 @@ TrialTypes = ceil(rand(1,MaxTrials)*2);
 BpodSystem.Data.TrialTypes = []; % The trial type of each trial completed will be added here.
 
 %% Initialize plots
+% Side Outcome Plot
 BpodSystem.ProtocolFigures.SideOutcomePlotFig = figure('Position', [200 200 1000 200],'name','Outcome plot','numbertitle','off', 'MenuBar', 'none', 'Resize', 'off');
 BpodSystem.GUIHandles.SideOutcomePlot = axes('Position', [.075 .3 .89 .6]);
 SideOutcomePlot(BpodSystem.GUIHandles.SideOutcomePlot,'init',2-TrialTypes);
+% Bpod Notebook (to record text notes about the session or individual trials)
 BpodNotebook('init');
+% Total Reward display (online display of the total amount of liquid reward earned)
 TotalRewardDisplay('init');
 
 %% Define stimuli and send to sound server
@@ -75,7 +81,7 @@ PunishSound = (rand(1,SF*.5)*2) - 1;
 % Generate early withdrawal sound
 W1 = GenerateSineWave(SF, 1000, .5); W2 = GenerateSineWave(SF, 1200, .5); EarlyWithdrawalSound = W1+W2;
 P = SF/100; Interval = P;
-for x = 1:50
+for x = 1:50 % Gate waveform to create pulses
     EarlyWithdrawalSound(P:P+Interval) = 0;
     P = P+(Interval*2);
 end
@@ -138,16 +144,16 @@ for currentTrial = 1:MaxTrials
         'StateChangeConditions', {'Tup', 'exit', CorrectWithdrawalEvent, 'exit'},...
         'OutputActions', {});
     sma = AddState(sma, 'Name', 'Punish', ...
-        'Timer', S.GUI.TimeoutDuration,...
+        'Timer', S.GUI.PunishTimeoutDuration,...
         'StateChangeConditions', {'Tup', 'exit'},...
         'OutputActions', {'SoftCode', 3});
     sma = AddState(sma, 'Name', 'EarlyWithdrawalPunish', ...
-        'Timer', S.GUI.TimeoutDuration,...
+        'Timer', S.GUI.PunishTimeoutDuration,...
         'StateChangeConditions', {'Tup', 'exit'},...
         'OutputActions', {'SoftCode', 4});
-    SendStateMatrix(sma);
-    RawEvents = RunStateMatrix;
-    if ~isempty(fieldnames(RawEvents)) % If trial data was returned
+    SendStateMatrix(sma); % Send the state matrix to the Bpod device
+    RawEvents = RunStateMatrix; % Run the trial and return events
+    if ~isempty(fieldnames(RawEvents)) % If trial data was returned (i.e. if not final trial, interrupted by user)
         BpodSystem.Data = AddTrialEvents(BpodSystem.Data,RawEvents); % Computes trial events from raw data
         BpodSystem.Data = BpodNotebook('sync', BpodSystem.Data); % Sync with Bpod notebook plugin
         BpodSystem.Data.TrialSettings(currentTrial) = S; % Adds the settings used for the current trial to the Data struct (to be saved after the trial ends)
@@ -157,12 +163,13 @@ for currentTrial = 1:MaxTrials
         SaveBpodSessionData; % Saves the field BpodSystem.Data to the current data file
     end
     HandlePauseCondition; % Checks to see if the protocol is paused. If so, waits until user resumes.
-    if BpodSystem.BeingUsed == 0
+    if BpodSystem.BeingUsed == 0 % If protocol was stopped, exit the loop
         return
     end
 end
 
 function UpdateSideOutcomePlot(TrialTypes, Data)
+% Determine outcomes from state data and score as the SideOutcomePlot plugin expects
 global BpodSystem
 Outcomes = zeros(1,Data.nTrials);
 for x = 1:Data.nTrials
@@ -177,6 +184,7 @@ end
 SideOutcomePlot(BpodSystem.GUIHandles.SideOutcomePlot,'update',Data.nTrials+1,2-TrialTypes,Outcomes);
 
 function UpdateTotalRewardDisplay(RewardAmount, currentTrial)
+% If rewarded based on the state data, update the TotalRewardDisplay
 global BpodSystem
     if ~isnan(BpodSystem.Data.RawEvents.Trial{currentTrial}.States.Reward(1))
         TotalRewardDisplay('add', RewardAmount);

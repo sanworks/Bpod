@@ -108,7 +108,7 @@ classdef BpodObject < handle
             sma.GlobalTimers = zeros(1,5);
             sma.GlobalTimerSet = zeros(1,5); % Changed to 1 when the timer is given a duration with SetGlobalTimer
             sma.GlobalCounterMatrix = ones(1,5);
-            sma.GlobalCounterEvents = ones(1,5)*254; % Default event of 254 is code for "no event attached".
+            sma.GlobalCounterEvents = ones(1,5)*255; % Default event of 255 is code for "no event attached".
             sma.GlobalCounterThresholds = zeros(1,5);
             sma.GlobalCounterSet = zeros(1,5); % Changed to 1 when the counter event is identified and given a threshold with SetGlobalCounter
             sma.StateTimers = 0;

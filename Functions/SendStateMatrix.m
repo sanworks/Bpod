@@ -91,7 +91,7 @@ else
     RotMatrix = (sma.GlobalCounterMatrix-1);
 end
 GlobalCounterMatrix = uint8(RotMatrix(1:end));
-GlobalCounterAttachedEvents = uint8(sma.GlobalCounterEvents);
+GlobalCounterAttachedEvents = uint8(sma.GlobalCounterEvents-1);
 GlobalCounterThresholds = uint32(sma.GlobalCounterThresholds);
 
 %% Format timers (doubles in seconds) into 32 bit int vectors in milliseconds

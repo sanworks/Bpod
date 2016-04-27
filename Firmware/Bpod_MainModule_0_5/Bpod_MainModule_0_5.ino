@@ -1,8 +1,8 @@
-/*{
+/*
 ----------------------------------------------------------------------------
 
-This file is part of the Bpod Project
-Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
+This file is part of the Sanworks Bpod repository
+Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -16,6 +16,7 @@ See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 */
 // Bpod Finite State Machine v 0.5
 // Requires the DueTimer library from:
@@ -59,17 +60,19 @@ byte PortValveOutputState = 0;   // State of all 8 valves
 byte PortInputsEnabled[8] = {0}; // Enabled or disabled input reads of port IR lines
 byte WireInputsEnabled[4] = {0}; // Enabled or disabled input reads of wire lines
 boolean PortInputLineValue[8] = {0}; // Direct reads of digital values of IR beams
+boolean PortInputLineOverride[8] = {0}; // set to 1 if user created a virtual input, to prevent hardware reads until user returns it to low
 boolean PortInputLineLastKnownStatus[8] = {0}; // Last known status of IR beams
 boolean BNCInputLineValue[2] = {0}; // Direct reads of BNC input lines
+boolean BNCInputLineOverride[2] = {0}; // Set to 1 if user created a virtual BNC high event, to prevent hardware reads until user returns low
 boolean BNCInputLineLastKnownStatus[2] = {0}; // Last known status of BNC input lines 
 boolean WireInputLineValue[4] = {0}; // Direct reads of Wire terminal input lines
+boolean WireInputLineOverride[2] = {0}; // Set to 1 if user created a virtual wire high event, to prevent hardware reads until user returns low
 boolean WireInputLineLastKnownStatus[4] = {0}; // Last known status of Wire terminal input lines 
 boolean MatrixFinished = false; // Has the system exited the matrix (final state)?
 boolean MatrixAborted = false; // Has the user aborted the matrix before the final state?
 boolean MeaningfulStateTimer = false; // Does this state's timer get us to another state when it expires?
 int CurrentState = 1; // What state is the state machine currently in? (State 0 is the final state)
 int NewState = 1;
-byte OverrideFlag = 0; // If 1, ignores input channels for current cycle
 byte CurrentEvent[10] = {0}; // What event code just happened and needs to be handled. Up to 10 can be acquired per 30us loop.
 byte nCurrentEvents = 0; // Index of current event
 byte SoftEvent = 0; // What soft event code just happened
@@ -88,19 +91,19 @@ byte LowByte = 0; // LowByte through FourthByte are used for reading bytes that 
 byte SecondByte = 0; byte ThirdByte = 0; byte FourthByte = 0;
 unsigned long LongInt = 0;
 int nStates = 0;
-int nTotalEvents = 0;
 int nEvents = 0;
 int LEDBrightnessAdjustInterval = 5;
 byte LEDBrightnessAdjustDirection = 1;
 byte LEDBrightness = 0;
-byte InputStateMatrix[128][50] = {0}; // Matrix containing all of Bpod's inputs and corresponding state transitions
-// Cols: 1-16 = IR beam in...out... 17-20 = BNC1 high...low 21-28 = wire1high...low 29=Tup 30=Unused 31-40=SoftEvents 
+byte InputStateMatrix[128][40] = {0}; // Matrix containing all of Bpod's inputs and corresponding state transitions
+// Cols: 0-15 = IR beam in...out... 16-19 = BNC1 high...low 20-27 = wire1high...low 28-37=SoftEvents 38=Unused  39=Tup  
 
 byte OutputStateMatrix[128][17] = {0}; // Matrix containing all of Bpod's output actions for each Input state
-// Cols: 1=Valves 2=BNC 3=Wire 4=Serial1 Op Code 5=Serial2 Op Code 6=StateIndependentTimerTrig 7=StateIndependentTimerCancel 8-15=PWM values (LED)
+// Cols: 0=Valves 1=BNC 2=Wire 3=Hardware serial 1 (UART) 4=Hardware Serial 2 (UART) 5 = SoftCode 5=GlobalTimerTrig 6=GlobalTimerCancel 
+// 7 = GlobalCounterReset 8-15=PWM values (LED channel on port interface board)
 
 byte GlobalTimerMatrix[128][5] = {0}; // Matrix contatining state transitions for global timer elapse events
-byte GlobalCounterMatrix[128][5] = {0}; // Matrix contatining state transitions for global timer elapse events
+byte GlobalCounterMatrix[128][5] = {0}; // Matrix contatining state transitions for global counter threshold events
 boolean GlobalTimersActive[5] = {0}; // 0 if timer x is inactive, 1 if it's active.
 unsigned long GlobalTimerEnd[5] = {0}; // Future Times when active global timers will elapse
 unsigned long GlobalTimers[5] = {0}; // Timers independent of states
@@ -117,7 +120,7 @@ unsigned long MatrixStartTimeMillis = 0; // Used for 32-bit timer wrap-over corr
 unsigned long StateStartTime = 0; // Session Start Time
 unsigned long NextLEDBrightnessAdjustTime = 0;
 byte ConnectedToClient = 0;
-unsigned long CurrentTime = 0;
+unsigned long CurrentTime = 0; // Current time (units = timer cycles since start; used to control state transitions)
 unsigned long TimeFromStart = 0;
 unsigned long Num2Break = 0; // For conversion from int32 to bytes
 unsigned long SessionStartTime = 0;
@@ -180,7 +183,6 @@ void handler() {
       break;
     case 'O':  // Override hardware state
       manualOverrideOutputs();
-      OverrideFlag = true;
       break;
     case 'I': // Read and return digital input line states
         while (SerialUSB.available() == 0) {}
@@ -231,34 +233,39 @@ void handler() {
     VirtualEventTarget = SerialUSB.read();
     while (SerialUSB.available() == 0) {}
     VirtualEventData = SerialUSB.read();
-    if (RunningStateMatrix) {
-    OverrideFlag = true;  // Skips this loop iteration's input state refresh to ensure intended effect and avoid negation by a state change
-    switch (VirtualEventTarget) {
-      case 'P': // Virtual poke PortInputLineLastKnownStatus
-        if (PortInputLineLastKnownStatus[VirtualEventData] == LOW) {
-          PortInputLineValue[VirtualEventData] = HIGH;
-        } else {
-          PortInputLineValue[VirtualEventData] = LOW;
-        }
-        break;
-        case 'B': // Virtual BNC input
-          if (BNCInputLineLastKnownStatus[VirtualEventData] == LOW) {
-            BNCInputLineValue[VirtualEventData] = HIGH;
-          } else {
-            BNCInputLineValue[VirtualEventData] = LOW;
-          }
-          break;
-        case 'W': // Virtual Wire input
-          if (WireInputLineLastKnownStatus[VirtualEventData] == LOW) {
-              WireInputLineValue[VirtualEventData] = HIGH;
+    if (RunningStateMatrix) { 
+        switch (VirtualEventTarget) {
+          case 'P': // Virtual poke PortInputLineLastKnownStatus
+            if (PortInputLineLastKnownStatus[VirtualEventData] == LOW) {
+              PortInputLineValue[VirtualEventData] = HIGH;
+              PortInputLineOverride[VirtualEventData] = true;
             } else {
-              WireInputLineValue[VirtualEventData] = LOW;
+              PortInputLineValue[VirtualEventData] = LOW;
+              PortInputLineOverride[VirtualEventData] = false;
             }
-        break;
-        case 'S':  // Soft event
-              SoftEvent = VirtualEventData;
-        break;
-      }
+            break;
+            case 'B': // Virtual BNC input
+              if (BNCInputLineLastKnownStatus[VirtualEventData] == LOW) {
+                BNCInputLineValue[VirtualEventData] = HIGH;
+                BNCInputLineOverride[VirtualEventData] = true;
+              } else {
+                BNCInputLineValue[VirtualEventData] = LOW;
+                BNCInputLineOverride[VirtualEventData] = false;
+              }
+              break;
+            case 'W': // Virtual Wire input
+              if (WireInputLineLastKnownStatus[VirtualEventData] == LOW) {
+                  WireInputLineValue[VirtualEventData] = HIGH;
+                  WireInputLineOverride[VirtualEventData] = true;
+                } else {
+                  WireInputLineValue[VirtualEventData] = LOW;
+                  WireInputLineOverride[VirtualEventData] = false;
+                }
+            break;
+            case 'S':  // Soft event
+                  SoftEvent = VirtualEventData;
+            break;
+          }
     } break;
     case 'P':  // Get new state matrix from client
       while (SerialUSB.available() == 0) {} 
@@ -324,10 +331,10 @@ void handler() {
       updateStatusLED(3);
       NewState = 0;
       CurrentState = 0;
-      nTotalEvents = 0;
       nEvents = 0;
       SoftEvent = 254; // No event
       MatrixFinished = false;
+
       // Reset event counters
       for (int x = 0; x < 5; x++) {
         GlobalCounterCounts[x] = 0;
@@ -339,25 +346,21 @@ void handler() {
           if (PortInputLineValue[x] == HIGH) {PortInputLineLastKnownStatus[x] = HIGH;} else {PortInputLineLastKnownStatus[x] = LOW;} // Update last known state of input line
         } else {
           PortInputLineLastKnownStatus[x] = LOW; PortInputLineValue[x] = LOW;
-        } 
+        }
+        PortInputLineOverride[x] = false; 
       }
       for (int x = 0; x < 2; x++) {
         BNCInputLineValue[x] = digitalReadDirect(BncInputLines[x]);
         if (BNCInputLineValue[x] == HIGH) {BNCInputLineLastKnownStatus[x] = true;} else {BNCInputLineLastKnownStatus[x] = false;}
+        BNCInputLineOverride[x] = false; 
       }
       for (int x = 0; x < 4; x++) {
         if (WireInputsEnabled[x] == 1) { 
           WireInputLineValue[x] = digitalReadDirect(WireDigitalInputLines[x]);
           if (WireInputLineValue[x] == HIGH) {WireInputLineLastKnownStatus[x] = true;} else {WireInputLineLastKnownStatus[x] = false;}
         }
+        WireInputLineOverride[x] = false; 
       }
-      // Set meaningful state timer variable (false if state timer is not used, so that a Tup event isn't generated)
-      if (InputStateMatrix[CurrentState][38] != CurrentState) {
-        MeaningfulStateTimer = true; 
-      } else {
-        MeaningfulStateTimer = false; 
-      }
-
       // Reset timers
       MatrixStartTime = 0;
       StateStartTime = MatrixStartTime;
@@ -376,26 +379,25 @@ void handler() {
   } // End SerialUSB.available
   
   if (RunningStateMatrix) {
-    OverrideFlag = false;
     nCurrentEvents = 0;
     CurrentEvent[0] = 254; // Event 254 = No event
     CurrentTime++;
-         if (OverrideFlag == false) {
            // Refresh state of sensors and inputs
            for (int x = 0; x < 8; x++) {
-             if (PortInputsEnabled[x] == 1) { 
+             if ((PortInputsEnabled[x] == 1) && (!PortInputLineOverride[x])) {
               PortInputLineValue[x] = digitalReadDirect(PortDigitalInputLines[x]);
              }
           }
           for (int x = 0; x < 2; x++) {
-            BNCInputLineValue[x] = digitalReadDirect(BncInputLines[x]);
+            if (!PortInputLineOverride[x]) {
+              BNCInputLineValue[x] = digitalReadDirect(BncInputLines[x]);
+            }
           }
           for (int x = 0; x < 4; x++) {
-            if (WireInputsEnabled[x] == 1) { 
+            if ((WireInputsEnabled[x] == 1) && (!WireInputLineOverride[x])) { 
               WireInputLineValue[x] = digitalReadDirect(WireDigitalInputLines[x]);
             }
           }
-         }
          // Determine which port event occurred
          int Ev = 0; // Since port-in and port-out events are indexed sequentially, Ev replaces x in the loop.
          for (int x = 0; x < 8; x++) {
@@ -460,8 +462,10 @@ void handler() {
                 CurrentEvent[nCurrentEvents] = Ev; nCurrentEvents++;
               }
               // Add current event to count (Crossing triggered on next cycle)
-              if (CurrentEvent[0] == GlobalCounterAttachedEvents[x]) {
-                GlobalCounterCounts[x] = GlobalCounterCounts[x] + 1;
+              for (int i = 0; i < nCurrentEvents; i++) {
+                if (CurrentEvent[i] == GlobalCounterAttachedEvents[x]) {
+                  GlobalCounterCounts[x] = GlobalCounterCounts[x] + 1;
+                }
               }
             }
             Ev = Ev + 1; 
@@ -491,7 +495,7 @@ void handler() {
             i++;
           }
           // Store timestamp of events captured in this cycle
-          if ((nTotalEvents + nCurrentEvents) < MaxTimestamps) {
+          if ((nEvents + nCurrentEvents) < MaxTimestamps) {
             for (int x = 0; x < nCurrentEvents; x++) {
               TimeStamps[nEvents] = CurrentTime;
               nEvents++;

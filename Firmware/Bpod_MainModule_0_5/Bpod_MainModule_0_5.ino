@@ -473,15 +473,22 @@ void handler() {
             CurrentEvent[nCurrentEvents] = Ev; nCurrentEvents++;
           }
           
-          // Now determine if a state transition should occur, based on the first CurrentEvent detected
-          if (CurrentEvent[0] < 40) {
-            NewState = InputStateMatrix[CurrentState][CurrentEvent[0]];
-          } else if (CurrentEvent[0] < 45) {
-            CurrentColumn = CurrentEvent[0] - 40;
-            NewState = GlobalTimerMatrix[CurrentState][CurrentColumn];
-          } else if (CurrentEvent[0] < 50) {
-            CurrentColumn = CurrentEvent[0] - 45;
-            NewState = GlobalCounterMatrix[CurrentState][CurrentColumn];
+          // Now determine if a state transition should occur. The first event linked to a state transition takes priority.
+          byte StateTransitionFound = 0; int i = 0;
+          while ((!StateTransitionFound) && (i < nCurrentEvents)) {
+            if (CurrentEvent[i] < 40) {
+              NewState = InputStateMatrix[CurrentState][CurrentEvent[i]];
+            } else if (CurrentEvent[i] < 45) {
+              CurrentColumn = CurrentEvent[0] - 40;
+              NewState = GlobalTimerMatrix[CurrentState][CurrentColumn];
+            } else if (CurrentEvent[i] < 50) {
+              CurrentColumn = CurrentEvent[i] - 45;
+              NewState = GlobalCounterMatrix[CurrentState][CurrentColumn];
+            }
+            if (NewState != CurrentState) {
+              StateTransitionFound = 1;
+            }
+            i++;
           }
           // Store timestamp of events captured in this cycle
           if ((nTotalEvents + nCurrentEvents) < MaxTimestamps) {

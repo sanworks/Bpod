@@ -95,17 +95,25 @@ while BpodSystem.InStateMatrix
                     TempCurrentEvents = VirtualCurrentEvents;
                 end
                 CurrentEvent(1:nCurrentEvents) = TempCurrentEvents(1:nCurrentEvents) + 1; % Read and convert from c++ index at 0 to MATLAB index at 1
-                DominantEvent = CurrentEvent(1); % Of all events captured in a cycle, only the first event may trigger a state transition.
-                if DominantEvent == 256
-                    BpodSystem.InStateMatrix = 0;
-                    break
-                elseif DominantEvent < 41
-                    NewState = InputMatrix(BpodSystem.CurrentStateCode, DominantEvent);
-                elseif DominantEvent < 46
-                    NewState = GlobalTimerMatrix(BpodSystem.CurrentStateCode, DominantEvent-40);
-                else
-                    NewState = GlobalCounterMatrix(BpodSystem.CurrentStateCode, DominantEvent-45);
+                TransitionEventFound = 0; i = 1;
+                NewState = BpodSystem.CurrentStateCode;
+                while (TransitionEventFound == 0) && (i <= nCurrentEvents)
+                    if CurrentEvent(i) == 256
+                        BpodSystem.InStateMatrix = 0;
+                        break
+                    elseif CurrentEvent(i) < 41
+                        NewState = InputMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i));
+                    elseif CurrentEvent(i) < 46
+                        NewState = GlobalTimerMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-40);
+                    else
+                        NewState = GlobalCounterMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-45);
+                    end
+                    if NewState ~= BpodSystem.CurrentStateCode
+                        TransitionEventFound = 1;
+                    end
+                    i = i + 1;
                 end
+                
                 SetBpodHardwareMirror2ReflectEvent(CurrentEvent);
                 if NewState ~= BpodSystem.CurrentStateCode
                     if  NewState <= nTotalStates
@@ -150,7 +158,7 @@ while BpodSystem.InStateMatrix
                 end
                 if BpodSystem.InStateMatrix == 1
                     UpdateBpodCommanderGUI;
-                    BpodSystem.LastEvent = EventNames{DominantEvent};
+                    BpodSystem.LastEvent = EventNames{1};
                     Events(nEvents+1:(nEvents+nCurrentEvents)) = CurrentEvent(1:nCurrentEvents);
                     CurrentEvent(1:nCurrentEvents) = 0;
                     set(BpodSystem.GUIHandles.LastEventDisplay, 'string', BpodSystem.LastEvent);

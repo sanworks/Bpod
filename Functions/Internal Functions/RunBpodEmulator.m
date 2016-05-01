@@ -60,7 +60,7 @@ switch Op
             end
             % Evaluate global counter transitions
             for x = 1:5
-                if BpodSystem.StateMatrix.GlobalCounterEvents(x) ~= 254
+                if BpodSystem.StateMatrix.GlobalCounterEvents(x) ~= 255
                     if BpodSystem.Emulator.GlobalCounterCounts(x) == BpodSystem.StateMatrix.GlobalCounterThresholds(x)
                         BpodSystem.Emulator.nCurrentEvents = BpodSystem.Emulator.nCurrentEvents + 1;
                         VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 45+x;

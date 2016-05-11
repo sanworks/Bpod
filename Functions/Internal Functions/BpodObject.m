@@ -388,7 +388,7 @@ classdef BpodObject < handle
             obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [363 32 40 40], 'Callback', 'ManualOverride(8,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
 
             obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [414 32 40 40], 'Callback', 'ManualOverride(9,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
-            obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(9,1);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
+            obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(10,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
 
             obj.GUIHandles.CurrentStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 268 115 20], 'FontWeight', 'bold', 'FontSize', 9);
             obj.GUIHandles.PreviousStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 219 115 20], 'FontWeight', 'bold', 'FontSize', 9);

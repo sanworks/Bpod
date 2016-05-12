@@ -89,6 +89,7 @@ int nWaves = 0; // number of scheduled waves registered
 byte CurrentWave = 0; // Scheduled wave currently in use
 byte LowByte = 0; // LowByte through FourthByte are used for reading bytes that will be combined to 16 and 32 bit integers
 byte SecondByte = 0; byte ThirdByte = 0; byte FourthByte = 0;
+byte Byte1 = 0; byte Byte2 = 0; byte Byte3 = 0; byte Byte4 = 0; // Temporary storage of command and param values read from serial port
 unsigned long LongInt = 0;
 int nStates = 0;
 int nEvents = 0;
@@ -185,20 +186,20 @@ void handler() {
       manualOverrideOutputs();
       break;
     case 'I': // Read and return digital input line states
-        LowByte = SerialReadByte();
-        SecondByte = SerialReadByte();
-        switch (LowByte) {
+        Byte1 = SerialReadByte();
+        Byte2 = SerialReadByte();
+        switch (Byte1) {
           case 'B': // Read BNC input line
-            ThirdByte = digitalReadDirect(BncInputLines[SecondByte]);
+            Byte3 = digitalReadDirect(BncInputLines[Byte2]);
           break;
           case 'P': // Read port digital input line
-            ThirdByte = digitalReadDirect(PortDigitalInputLines[SecondByte]);
+            Byte3 = digitalReadDirect(PortDigitalInputLines[Byte2]);
           break;
           case 'W': // Read wire digital input line
-            ThirdByte = digitalReadDirect(WireDigitalInputLines[SecondByte]);
+            Byte3 = digitalReadDirect(WireDigitalInputLines[Byte2]);
           break;
         }
-        SerialUSB.write(ThirdByte);
+        SerialUSB.write(Byte3);
         break;
     case 'Z':  // Bpod governing machine has closed the client program
       ConnectedToClient = 0;
@@ -206,20 +207,17 @@ void handler() {
       SerialUSB.write('1');
       updateStatusLED(0);
       break;
-    case 'S': // Soft code. Since not in a state matrix, read bytes and ignore data.
+    case 'S': // Soft code. 
         VirtualEventTarget = SerialReadByte();
         VirtualEventData = SerialReadByte();
       break;
     case 'H': // Recieve byte from USB and send to serial module 1 or 2
-        LowByte = SerialReadByte();
-        SecondByte = SerialReadByte();
-        switch (LowByte) {
-          case 1: // Send to serial port 1
-            Serial1.write(SecondByte);
-          break;
-          case 2: // Send to serial port 2
-            Serial2.write(SecondByte);
-          break;
+        Byte1 = SerialReadByte();
+        Byte2 = SerialReadByte();
+        if (Byte1 == 1) {
+            Serial1.write(Byte2);
+        } else if (Byte1 == 2) {
+            Serial2.write(Byte2);
         }
      break;
     case 'V': // Manual override: execute virtual event
@@ -663,24 +661,24 @@ void manualOverrideOutputs() {
       UpdatePWMOutputStates(); 
       break;
     case 'V':  // Override valves
-      LowByte = SerialReadByte();
-      ValveRegWrite(LowByte);
+      Byte1 = SerialReadByte();
+      ValveRegWrite(Byte1);
       break;
     case 'B': // Override BNC lines
-      LowByte = SerialReadByte();
-      SetBNCOutputLines(LowByte);
+      Byte1 = SerialReadByte();
+      SetBNCOutputLines(Byte1);
       break;
     case 'W':  // Override wire terminal output lines
-      LowByte = SerialReadByte();
-      SetWireOutputLines(LowByte);
+      Byte1 = SerialReadByte();
+      SetWireOutputLines(Byte1);
       break;
     case 'S': // Override serial module port 1
-      LowByte = SerialReadByte();  // Read data to send
-      Serial1.write(LowByte);
+      Byte1 = SerialReadByte();  // Read data to send
+      Serial1.write(Byte1);
       break;
     case 'T': // Override serial module port 2
-      LowByte = SerialReadByte();  // Read data to send
-      Serial2.write(LowByte);
+      Byte1 = SerialReadByte();  // Read data to send
+      Serial2.write(Byte1);
       break;
     }
  }

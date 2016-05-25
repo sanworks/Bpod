@@ -17,20 +17,20 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
-function TeensySoundServer(varargin)
+function TeensySoundServer(op, varargin)
 global BpodSystem
-Message = lower(varargin{1});
+Message = lower(op);
 switch Message
     case 'init'
         % Syntax: TeensySoundServer('init', SerialPort); % example SerialPort = 'COM3' 
         SerialPort = varargin{1};
-        BpodSystem.PluginSerialPorts.TeensySoundServer = serial(SerialPort, 'BaudRate', 115200, 'Timeout', 1, 'DataTerminalReady', 'on', 'OutputBufferSize', 50000000);
+        BpodSystem.PluginSerialPorts.TeensySoundServer = serial(SerialPort, 'BaudRate', 115200, 'Timeout', 10, 'DataTerminalReady', 'on', 'OutputBufferSize', 50000000);
         fopen(BpodSystem.PluginSerialPorts.TeensySoundServer);
     case 'loadwaveform'
         % Syntax: TeensySoundServer('loadwaveform', index, data);
-        Index = varargin{2};
-        WaveData = varargin{3};
-        FilePath = fullfile(BpodSystem.BpodPath, 'Bpod System Files', 'Plugins', 'TeensySoundServer', 'temp.wav');
+        Index = varargin{1};
+        WaveData = varargin{2};
+        FilePath = fullfile(BpodSystem.BpodPath, 'Functions', 'Plugins', 'TeensySoundServer', 'temp.wav');
         audiowrite(FilePath, WaveData, 44100,'BitsPerSample', 16);
         F = fopen(FilePath);
         FileData = fread(F);
@@ -40,7 +40,7 @@ switch Message
         fwrite(BpodSystem.PluginSerialPorts.TeensySoundServer, length(FileData), 'uint32');
         fwrite(BpodSystem.PluginSerialPorts.TeensySoundServer, FileData, 'uint8');
     case 'loadfile'
-        % Syntax: TeensySoundServer('sendfile', index, filepath);
+        % Syntax: TeensySoundServer('loadfile', index, filepath);
         Index = varargin{2};
         FilePath = varargin{3};
         F = fopen(FilePath);
@@ -52,7 +52,7 @@ switch Message
         fwrite(BpodSystem.PluginSerialPorts.TeensySoundServer, FileData, 'uint8');
     case 'play'
         % Syntax: TeensySoundServer('play', index);
-        Index = varargin{2};
+        Index = varargin{1};
         fwrite(BpodSystem.PluginSerialPorts.TeensySoundServer, ['S' Index]);
     case 'end'
         % Syntax: TeensySoundServer('end');

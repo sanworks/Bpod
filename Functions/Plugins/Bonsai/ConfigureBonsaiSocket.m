@@ -47,4 +47,5 @@ else
     BpodSocketServer('close');
     set(BpodSystem.GUIHandles.BonsaiConnectStatus, 'String', 'Disconnected', 'ForegroundColor', 'r');
     set(BpodSystem.GUIHandles.BonsaiConnectButton, 'CData', BpodSystem.GUIHandles.BonsaiConnectButtonGFX);
+    BpodSystem.BonsaiSocket.Connected = 0;
 end

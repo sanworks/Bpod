@@ -40,7 +40,7 @@ void setup() {
   Serial1.begin(115200);
   AudioMemory(5);
   audioShield.enable();
-  audioShield.volume(80);
+  audioShield.volume(0.5);
   SPI.setMOSI(7); SPI.setSCK(14);
   if (SD.begin(10)) {
     wav.play("001.WAV");

@@ -22,6 +22,12 @@ global BpodSystem
 if isempty(BpodSystem.StateMatrix)
     error('Error: A state matrix must be sent prior to calling "RunStateMatrix".')
 end
+if BpodSystem.BonsaiSocket.Connected == 1
+    BonsaiBytesAvailable = BpodSocketServer('bytesAvailable');
+    if BonsaiBytesAvailable > 0
+        BpodSocketServer('read', BonsaiBytesAvailable);
+    end
+end
 RawTrialEvents = struct;
 if BpodSystem.EmulatorMode == 0
     if BpodSerialBytesAvailable > 0

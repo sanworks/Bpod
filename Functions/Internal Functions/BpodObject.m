@@ -278,7 +278,7 @@ classdef BpodObject < handle
                             end
                             TestPort = IOPort('OpenSerialPort', PortString, 'BaudRate=115200, OutputBufferSize=8000, DTR=1');
                             pause(.5);
-                            IOPort('Write', TestPort, char(54), 1);
+                            IOPort('Write', TestPort, char(54), 0);
                             pause(.1);
                             Byte = IOPort('Read', TestPort, 1, 1);
                             if Byte == 53

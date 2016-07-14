@@ -1,8 +1,8 @@
 %{
 ----------------------------------------------------------------------------
 
-This file is part of the Sanworks Bpod repository
-Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
+This file is part of the Bpod Project
+Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
 
 ----------------------------------------------------------------------------
 
@@ -40,20 +40,18 @@ end
 BpodParameterGUI('init', S);
 
 %% Define trials
-nSinglePokeTrials = 5; % Number of trials where each poke is rewarded
-nDoublePokeTrials = 5; % Number of trials requiring 2 pokes per reward
-nTriplePokeTrials = 5; % Number of trials requiring 3 pokes per reward
-nRandomTrials = 850; % Number of randomly interleaved single, double and triple poke trials
+nSinglePokeTrials = 5;
+nDoublePokeTrials = 5;
+nTriplePokeTrials = 5;
+nRandomTrials = 850;
 MaxTrials = nSinglePokeTrials+nDoublePokeTrials+nTriplePokeTrials+nRandomTrials;
 TrialTypes = [ones(1,nSinglePokeTrials) ones(1,nDoublePokeTrials)*2 ones(1,nTriplePokeTrials)*3 ceil(rand(1,nRandomTrials)*3)];
 BpodSystem.Data.TrialTypes = []; % The trial type of each trial completed will be added here.
 
 %% Initialize plots
-% TrialType Outcome Plot (displays each future trial type, and scores completed trials as correct/incorrect
 BpodSystem.ProtocolFigures.OutcomePlotFig = figure('Position', [200 200 1000 200],'name','Outcome plot','numbertitle','off', 'MenuBar', 'none', 'Resize', 'off');
 BpodSystem.GUIHandles.OutcomePlot = axes('Position', [.075 .3 .89 .6]);
 TrialTypeOutcomePlot(BpodSystem.GUIHandles.OutcomePlot,'init',TrialTypes);
-% Bpod Notebook (to record text notes about the session or individual trials)
 BpodNotebook('init');
 
 %% Main trial loop
@@ -133,7 +131,6 @@ for currentTrial = 1:MaxTrials
 end
 
 function UpdateOutcomePlot(TrialTypes, Data)
-% Determine outcomes from state data and score as the SideOutcomePlot plugin expects
 global BpodSystem
 Outcomes = zeros(1,Data.nTrials);
 for x = 1:Data.nTrials

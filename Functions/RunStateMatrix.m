@@ -199,10 +199,7 @@ if BpodSystem.BeingUsed == 1
         TrialStartMicroseconds = BpodSerialRead(1, 'uint32'); % Time the trial started (in microseconds)
         TrialStartMilliseconds = TrialStartMicroseconds/1000;
         nTimeStamps = BpodSerialRead(1, 'uint16');
-        TimeStamps = zeros(1,nTimeStamps);
-        for x = 1:nTimeStamps
-            TimeStamps(x) = BpodSerialRead(1, 'uint32');
-        end
+        TimeStamps = BpodSerialRead(nTimeStamps, 'uint32');
         if TimeStamps(end) < TrialStartMicroseconds
             % The 32-bit microsecond clock rolled over. Add 4294967295 to timestamps that occur after the roll-over.
             PostRollOverIndexes = (TimeStamps < TrialStartMicroseconds);

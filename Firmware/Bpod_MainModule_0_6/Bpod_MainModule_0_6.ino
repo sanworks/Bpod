@@ -532,9 +532,9 @@ void handler() { // This is the timer handler function, which is called every 10
 void SetBNCOutputLines(int BNCState) {
   switch(BNCState) {
     case 0: {digitalWriteDirect(BncOutputLines[0], LOW); digitalWriteDirect(BncOutputLines[1], LOW);} break;
-    case 1: {digitalWriteDirect(BncOutputLines[1], HIGH); digitalWriteDirect(BncOutputLines[1], LOW);} break;
+    case 1: {digitalWriteDirect(BncOutputLines[0], HIGH); digitalWriteDirect(BncOutputLines[1], LOW);} break;
     case 2: {digitalWriteDirect(BncOutputLines[0], LOW); digitalWriteDirect(BncOutputLines[1], HIGH);} break;
-    case 3: {digitalWriteDirect(BncOutputLines[1], HIGH); digitalWriteDirect(BncOutputLines[1], HIGH);} break;
+    case 3: {digitalWriteDirect(BncOutputLines[0], HIGH); digitalWriteDirect(BncOutputLines[1], HIGH);} break;
   }
 }
 int ValveRegWrite(int value) {

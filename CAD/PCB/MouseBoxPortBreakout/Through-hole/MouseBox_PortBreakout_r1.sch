@@ -2316,9 +2316,9 @@ Basic schematic elements and footprints for 0603, 1206, and PTH resistors.</desc
 <part name="JP1" library="SparkFun" deviceset="M06" device="3.5MM-6"/>
 <part name="VALVE" library="SparkFun" deviceset="M02" device="3.5MM_LOCK"/>
 <part name="R4" library="bourns" deviceset="3362" device="R"/>
-<part name="R1" library="SparkFun-Resistors" deviceset="RESISTOR" device="AXIAL-0.3" value="100"/>
-<part name="R2" library="SparkFun-Resistors" deviceset="RESISTOR" device="AXIAL-0.3" value="150"/>
+<part name="R1" library="SparkFun-Resistors" deviceset="RESISTOR" device="AXIAL-0.3" value="10"/>
 <part name="R3" library="SparkFun-Resistors" deviceset="RESISTOR" device="AXIAL-0.3" value="15K"/>
+<part name="R2" library="SparkFun-Resistors" deviceset="RESISTOR" device="AXIAL-0.3" value="500"/>
 </parts>
 <sheets>
 <sheet>
@@ -2328,10 +2328,10 @@ Basic schematic elements and footprints for 0603, 1206, and PTH resistors.</desc
 <instance part="U$1" gate="G$1" x="81.28" y="0" rot="R270"/>
 <instance part="JP1" gate="G$1" x="81.28" y="63.5" rot="R270"/>
 <instance part="VALVE" gate="G$1" x="40.64" y="38.1" rot="R270"/>
-<instance part="R4" gate="G$1" x="119.38" y="45.72" rot="R270"/>
-<instance part="R1" gate="G$1" x="104.14" y="45.72" rot="R180"/>
-<instance part="R2" gate="G$1" x="101.6" y="20.32" rot="R90"/>
+<instance part="R4" gate="G$1" x="101.6" y="33.02" rot="R270"/>
+<instance part="R1" gate="G$1" x="101.6" y="22.86" rot="R270"/>
 <instance part="R3" gate="G$1" x="116.84" y="20.32" rot="R90"/>
+<instance part="R2" gate="G$1" x="127" y="20.32" rot="R90"/>
 </instances>
 <busses>
 </busses>
@@ -2352,27 +2352,27 @@ Basic schematic elements and footprints for 0603, 1206, and PTH resistors.</desc
 <net name="N$2" class="0">
 <segment>
 <wire x1="114.3" y1="15.24" x2="116.84" y2="15.24" width="0.1524" layer="91"/>
-<wire x1="116.84" y1="15.24" x2="119.38" y2="15.24" width="0.1524" layer="91"/>
-<wire x1="119.38" y1="15.24" x2="119.38" y2="40.64" width="0.1524" layer="91"/>
 <wire x1="114.3" y1="15.24" x2="114.3" y2="12.7" width="0.1524" layer="91"/>
 <wire x1="114.3" y1="12.7" x2="93.98" y2="12.7" width="0.1524" layer="91"/>
 <wire x1="93.98" y1="12.7" x2="93.98" y2="17.78" width="0.1524" layer="91"/>
 <wire x1="93.98" y1="17.78" x2="83.82" y2="17.78" width="0.1524" layer="91"/>
 <wire x1="83.82" y1="17.78" x2="83.82" y2="12.7" width="0.1524" layer="91"/>
 <pinref part="U$1" gate="G$1" pin="4"/>
-<pinref part="R4" gate="G$1" pin="2"/>
 <pinref part="R3" gate="G$1" pin="1"/>
 <junction x="116.84" y="15.24"/>
+<pinref part="R2" gate="G$1" pin="1"/>
+<wire x1="116.84" y1="15.24" x2="127" y2="15.24" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="N$3" class="0">
 <segment>
 <wire x1="78.74" y1="58.42" x2="78.74" y2="48.26" width="0.1524" layer="91"/>
 <pinref part="JP1" gate="G$1" pin="2"/>
-<pinref part="R1" gate="G$1" pin="2"/>
-<wire x1="99.06" y1="45.72" x2="91.44" y2="45.72" width="0.1524" layer="91"/>
 <wire x1="91.44" y1="45.72" x2="91.44" y2="48.26" width="0.1524" layer="91"/>
 <wire x1="91.44" y1="48.26" x2="78.74" y2="48.26" width="0.1524" layer="91"/>
+<pinref part="R2" gate="G$1" pin="2"/>
+<wire x1="127" y1="25.4" x2="127" y2="45.72" width="0.1524" layer="91"/>
+<wire x1="127" y1="45.72" x2="91.44" y2="45.72" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="GND" class="0">
@@ -2410,12 +2410,10 @@ Basic schematic elements and footprints for 0603, 1206, and PTH resistors.</desc
 </net>
 <net name="N$7" class="0">
 <segment>
-<wire x1="83.82" y1="30.48" x2="106.68" y2="30.48" width="0.1524" layer="91"/>
-<wire x1="106.68" y1="30.48" x2="106.68" y2="25.4" width="0.1524" layer="91"/>
-<wire x1="83.82" y1="58.42" x2="83.82" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="83.82" y1="58.42" x2="83.82" y2="33.02" width="0.1524" layer="91"/>
 <pinref part="JP1" gate="G$1" pin="4"/>
-<pinref part="R2" gate="G$1" pin="2"/>
-<wire x1="106.68" y1="25.4" x2="101.6" y2="25.4" width="0.1524" layer="91"/>
+<pinref part="R4" gate="G$1" pin="1"/>
+<wire x1="96.52" y1="33.02" x2="83.82" y2="33.02" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="N$8" class="0">
@@ -2425,14 +2423,14 @@ Basic schematic elements and footprints for 0603, 1206, and PTH resistors.</desc
 <wire x1="99.06" y1="20.32" x2="86.36" y2="20.32" width="0.1524" layer="91"/>
 <wire x1="86.36" y1="20.32" x2="86.36" y2="12.7" width="0.1524" layer="91"/>
 <pinref part="U$1" gate="G$1" pin="3"/>
-<pinref part="R2" gate="G$1" pin="1"/>
+<pinref part="R1" gate="G$1" pin="2"/>
+<wire x1="101.6" y1="15.24" x2="101.6" y2="17.78" width="0.1524" layer="91"/>
 </segment>
 </net>
-<net name="N$9" class="0">
+<net name="N$4" class="0">
 <segment>
-<pinref part="R4" gate="G$1" pin="1"/>
+<pinref part="R4" gate="G$1" pin="2"/>
 <pinref part="R1" gate="G$1" pin="1"/>
-<wire x1="114.3" y1="45.72" x2="109.22" y2="45.72" width="0.1524" layer="91"/>
 </segment>
 </net>
 </nets>

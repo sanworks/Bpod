@@ -1,0 +1,21 @@
+[general]
+version = 1
+name = Current settings
+weight = 0
+machine_type = ultimaker2
+
+[settings]
+speed_wall = 40
+infill_sparse_density = 30
+layer_height = 0.15
+wall_thickness = 1.6
+speed_infill = 50
+speed_print = 40
+speed_topbottom = 25
+skirt_line_count = 2
+speed_wall_x = 40
+top_bottom_thickness = 1.6
+adhesion_type = skirt
+speed_travel = 200
+speed_wall_0 = 40
+

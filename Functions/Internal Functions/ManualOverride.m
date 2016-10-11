@@ -114,6 +114,15 @@ switch TargetCode
         end
         OverrideMessage = ['H' 2 Databyte];
         ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton2;
+    case 11
+        Databyte = str2double(get(BpodSystem.GUIHandles.HWSerialCodeSelector3, 'String'));
+        if Databyte >= 0
+            Databyte = uint8(Databyte);
+        else
+            error('The serial message must be a byte in the range 0-255');
+        end
+        OverrideMessage = ['H' 3 Databyte];
+        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton3;
 end
 
 %% Send message to Bpod
@@ -138,7 +147,7 @@ if TargetCode == 1
 end
 
 %% If sending a soft byte code, flash the button to indicate success
-if (TargetCode > 7) && (TargetCode < 11)
+if (TargetCode > 7) && (TargetCode < 12)
     set(ButtonHandle, 'CData', BpodSystem.Graphics.SoftTriggerActiveButton)
     drawnow;
     pause(.2);

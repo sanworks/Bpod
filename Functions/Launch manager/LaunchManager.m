@@ -282,7 +282,7 @@ if ~isempty(NameList)
         SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName, 'Session Settings',[SettingsFileName '.mat']);
         BpodSystem.DataPath = DataPath;
         BpodSystem.SettingsPath = SettingsPath;
-        ProtocolPath = fullfile(BpodSystem.BpodPath,'Protocols',ProtocolName,[ProtocolName '.m']);
+        ProtocolPath = fullfile(BpodSystem.ProtocolRoot,ProtocolName,[ProtocolName '.m']);
         close(LaunchManager)
         BpodSystem.Live = 1;
         BpodSystem.GUIData.ProtocolName = ProtocolName;

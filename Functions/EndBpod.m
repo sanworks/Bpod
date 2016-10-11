@@ -34,11 +34,11 @@ if BpodSystem.BeingUsed == 0
     pause(.1);
     delete(BpodSystem.GUIHandles.MainFig);
     if BpodSystem.EmulatorMode == 0
-        switch BpodSystem.UsesPsychToolbox
-        case 0
+        switch BpodSystem.ControlInterface
+        case 0 % Java
             fclose(BpodSystem.SerialPort);
             delete(BpodSystem.SerialPort);
-        case 1
+        case 1 % Psychtoolbox
             IOPort('Close', BpodSystem.SerialPort);
         end
     

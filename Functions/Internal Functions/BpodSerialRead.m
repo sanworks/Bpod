@@ -1,10 +1,9 @@
 function Data = BpodSerialRead(nIntegers, Datatype)
 global BpodSystem
-switch BpodSystem.UsesPsychToolbox
-    case 0
+switch BpodSystem.ControlInterface
+    case 0 % MATLAB/Java
         Data = fread(BpodSystem.SerialPort, nIntegers, Datatype);
-    case 1
-        % Psych toolbox way
+    case 1 % Psychtoolbox
         nIntegers = double(nIntegers);
         switch Datatype
             case 'uint8'
@@ -18,4 +17,6 @@ switch BpodSystem.UsesPsychToolbox
                 Data = uint8(Data);
                 Data = double(typecast(Data, 'uint32'));
         end
+    case 2 % Ethernet/Serial
+        
 end

@@ -1,6 +1,6 @@
 % Example state matrix: Drives a BNC line high and sends a soft code, then
 % drives the other BNC line high when the governing computer sends a
-% response
+% response. Measure both BNC lines with an oscilloscope to see the latency.
 
 sma = NewStateMatrix();
 
@@ -18,4 +18,4 @@ sma = AddState(sma, 'Name', 'HandleSoftCode', ...
     'OutputActions', {'BNCState', 2});
 
 % Set soft code handler to send byte 
-BpodSystem.SoftCodeHandlerFunction = 'SoftCodeLatencyLoop_CodeHandler';
+BpodSystem.SoftCodeHandlerFunction = 'SoftCodeHandler_LatencyLoop';

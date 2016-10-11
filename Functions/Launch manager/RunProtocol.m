@@ -27,7 +27,7 @@ switch Opstring
             SelectedProtocol = get(BpodSystem.GUIHandles.ProtocolSelector, 'Value');
             SelectedProtocolName = ProtocolNames{SelectedProtocol};
             BpodSystem.CurrentProtocolName = SelectedProtocolName;
-            addpath(fullfile(BpodSystem.BpodPath, 'Protocols', SelectedProtocolName));
+            addpath(fullfile(BpodSystem.ProtocolRoot, SelectedProtocolName));
             LaunchManager;
         else
             if BpodSystem.Pause == 0
@@ -45,7 +45,7 @@ switch Opstring
             disp(' ')
             disp([BpodSystem.CurrentProtocolName ' ended.'])
         end
-        rmpath(fullfile(BpodSystem.BpodPath, 'Protocols', BpodSystem.CurrentProtocolName));
+        rmpath(fullfile(BpodSystem.ProtocolRoot, BpodSystem.CurrentProtocolName));
         BpodSystem.BeingUsed = 0;
         BpodSystem.CurrentProtocolName = '';
         BpodSystem.SettingsPath = '';

@@ -1,6 +1,4 @@
 classdef BpodObject < handle
-    %STATEMACHINEOBJECT Summary of this class goes here
-    %   Detailed explanation goes here
     
     properties
         StateMatrix
@@ -19,7 +17,10 @@ classdef BpodObject < handle
         GUIHandles
         GUIData
         Graphics
+        nEvents
         EventNames
+        ChannelNames
+        nOutputActions
         OutputActionNames
         BeingUsed
         InStateMatrix
@@ -35,12 +36,15 @@ classdef BpodObject < handle
         SettingsPath
         DataPath
         ProtocolPath
+        ProtocolRoot
         InputConfigPath
         InputsEnabled
+        SyncConfig
+        SyncConfigPath
         PluginSerialPorts
         PluginFigureHandles
         PluginObjects
-        UsesPsychToolbox
+        ControlInterface
         SystemSettings
         SoftCodeHandlerFunction
         ProtocolFigures
@@ -54,8 +58,12 @@ classdef BpodObject < handle
         HostOS % Holds a string naming the host operating system (i.e. 'Microsoft Windows XP')
         ProtocolStartTime % The time when the current protocol was started.
         BonsaiSocket % An object containing a TCP/IP socket for communication with Bonsai
+        MaxStates % Maximum number of states the attached Bpod can store
+        OutputPos % Offset of each output event in the output matrix (differs between Bpod versions)
     end
-    
+    properties (Access = private)
+        ProtocolSelectorLastValue
+    end
     methods
         function obj = BpodObject(BpodPath) %Constructor
             load SplashBGData;
@@ -78,17 +86,10 @@ classdef BpodObject < handle
             obj.HardwareState.WireOutputs = zeros(1,4);
             obj.HardwareState.Serial1Code = 0;
             obj.HardwareState.Serial2Code = 0;
+            obj.HardwareState.Serial3Code = 0;
             obj.HardwareState.SoftCode = 0;
             obj.LastHardwareState = obj.HardwareState;
             obj.BNCOverrideState = zeros(1,4);
-            obj.EventNames = {'Port1In', 'Port1Out', 'Port2In', 'Port2Out', 'Port3In', 'Port3Out', 'Port4In', 'Port4Out', 'Port5In', 'Port5Out', ...
-                'Port6In', 'Port6Out', 'Port7In', 'Port7Out', 'Port8In', 'Port8Out', 'BNC1High', 'BNC1Low', 'BNC2High', 'BNC2Low', ...
-                'Wire1High', 'Wire1Low', 'Wire2High', 'Wire2Low', 'Wire3High', 'Wire3Low', 'Wire4High', 'Wire4Low', ...
-                'SoftCode1', 'SoftCode2', 'SoftCode3', 'SoftCode4', 'SoftCode5', 'SoftCode6', 'SoftCode7', 'SoftCode8', 'SoftCode9', 'SoftCode10', ...
-                'Unused', 'Tup', 'GlobalTimer1_End', 'GlobalTimer2_End', 'GlobalTimer3_End', 'GlobalTimer4_End', 'GlobalTimer5_End', ...
-                'GlobalCounter1_End', 'GlobalCounter2_End', 'GlobalCounter3_End', 'GlobalCounter4_End', 'GlobalCounter5_End'};
-            obj.OutputActionNames = {'ValveState', 'BNCState', 'WireState', 'Serial1Code', 'Serial2Code', 'SoftCode', ...
-                'GlobalTimerTrig', 'GlobalTimerCancel', 'GlobalCounterReset', 'PWM1', 'PWM2', 'PWM3', 'PWM4', 'PWM5', 'PWM6', 'PWM7', 'PWM8'};
             obj.Birthdate = now;
             obj.CurrentProtocolName = '';
             if exist('objSettings.mat') > 0
@@ -97,24 +98,6 @@ classdef BpodObject < handle
             else
                 obj.SystemSettings = struct;
             end
-            % Generate blank state matrix
-            sma.nStates = 0;
-            sma.nStatesInManifest = 0;
-            sma.Manifest = cell(1,127); % State names in the order they were added by user
-            sma.StateNames = {'Placeholder'}; % State names in the order they were referenced
-            sma.InputMatrix = ones(1,40);
-            sma.OutputMatrix = zeros(1,17);
-            sma.GlobalTimerMatrix = ones(1,5);
-            sma.GlobalTimers = zeros(1,5);
-            sma.GlobalTimerSet = zeros(1,5); % Changed to 1 when the timer is given a duration with SetGlobalTimer
-            sma.GlobalCounterMatrix = ones(1,5);
-            sma.GlobalCounterEvents = ones(1,5)*255; % Default event of 255 is code for "no event attached".
-            sma.GlobalCounterThresholds = zeros(1,5);
-            sma.GlobalCounterSet = zeros(1,5); % Changed to 1 when the counter event is identified and given a threshold with SetGlobalCounter
-            sma.StateTimers = 0;
-            sma.StatesDefined = 1; % Referenced states are set to 0. Defined states are set to 1. Both occur with AddState
-            obj.BlankStateMatrix = sma;
-            
             obj.HostOS = system_dependent('getos');
             obj.BpodPath = BpodPath;
             dir_calfiles = dir( fullfile(obj.BpodPath,'Calibration Files') );
@@ -129,7 +112,7 @@ classdef BpodObject < handle
                     load(LiquidCalibrationFilePath);
                     obj.CalibrationTables.LiquidCal = LiquidCal;
                 catch
-                  obj.CalibrationTables.LiquidCal = [];  
+                    obj.CalibrationTables.LiquidCal = [];
                 end
                 % Sound
                 try
@@ -137,22 +120,26 @@ classdef BpodObject < handle
                     load(SoundCalibrationFilePath);
                     obj.CalibrationTables.SoundCal = SoundCal;
                 catch
-                  obj.CalibrationTables.SoundCal = [];  
+                    obj.CalibrationTables.SoundCal = [];
                 end
             end
             % Load input channel settings
             obj.InputConfigPath = fullfile(obj.BpodPath, 'Settings Files', 'BpodInputConfig.mat');
             load(obj.InputConfigPath);
             obj.InputsEnabled = BpodInputConfig;
-
+            
+            obj.SyncConfigPath = fullfile(obj.BpodPath, 'Settings Files', 'BpodSyncConfig.mat');
+            load(obj.SyncConfigPath);
+            obj.SyncConfig = BpodSyncConfig;
+            
             % Determine if PsychToolbox is installed. If so, serial communication
             % will proceed through lower latency psychtoolbox IOport serial interface (compiled for each platform).
             % Otherwise, Bpod defaults to MATLAB's Java based serial interface.
             try
                 V = PsychtoolboxVersion;
-                obj.UsesPsychToolbox = 1;
+                obj.ControlInterface = 1;
             catch
-                obj.UsesPsychToolbox = 0;
+                obj.ControlInterface = 0;
             end
             %Check for Data folder
             dir_data = dir(fullfile(obj.BpodPath,'Data'));
@@ -163,7 +150,7 @@ classdef BpodObject < handle
         function obj = InitializeHardware(obj, portString)
             BaudRate = 115200;
             if ~isempty(obj.SerialPort)
-                switch obj.UsesPsychToolbox
+                switch obj.ControlInterface
                     case 0
                         fclose(obj.SerialPort);
                         delete(obj.SerialPort);
@@ -171,7 +158,7 @@ classdef BpodObject < handle
                 end
                 obj.SerialPort = [];
             end
-
+            
             if ~ispc && ~ismac
                 % Ensure access to serial ports under ubuntu
                 if exist(['/usr/local/MATLAB/R' version('-release') '/bin/glnxa64/java.opts']) ~= 2
@@ -194,16 +181,16 @@ classdef BpodObject < handle
                     end
                 end
             end
-
+            
             if ~strcmp(portString, 'AUTO')
                 Ports = cell(1,1);
                 Ports{1} = portString;
             else
                 Ports = FindArduinoPorts;
                 if isempty(Ports)
-                    error('Unable to auto-detect the Bpod serial port. Please call Bpod with a serial port argument (e.g. ''COM3''.') 
+                    error('Unable to auto-detect the Bpod serial port. Please call Bpod with a serial port argument (e.g. ''COM3''.')
                 end
-
+                
                 % Make it search on the last successful port first
                 if isfield(obj.SystemSettings, 'LastCOMPort')
                     LastCOMPort = obj.SystemSettings.LastCOMPort;
@@ -217,7 +204,7 @@ classdef BpodObject < handle
             end
             Found = 0;
             x = 0;
-            switch obj.UsesPsychToolbox
+            switch obj.ControlInterface
                 case 0 % Java serial interface (MATLAB default)
                     disp('Connecting with MATLAB/Java serial interface (high latency).')
                     while (Found == 0) && (x < length(Ports)) && ~isempty(Ports{1})
@@ -267,7 +254,7 @@ classdef BpodObject < handle
                 case 1 % Psych toolbox serial interface
                     disp('Connecting with PsychToolbox serial interface (low latency).')
                     oldlevel = IOPort('Verbosity', 0);
-                     while (Found == 0) && (x < length(Ports)) && ~isempty(Ports{1})
+                    while (Found == 0) && (x < length(Ports)) && ~isempty(Ports{1})
                         x = x + 1;
                         disp(['Trying port ' Ports{x}])
                         try
@@ -285,31 +272,31 @@ classdef BpodObject < handle
                                 Found = x;
                             end
                             IOPort('Close', TestPort);
-
+                            
                         catch
                         end
-                     end
-                     if Found ~= 0
-                         if ispc
-                             PortString = ['\\.\' Ports{Found}];
-                         else
-                             PortString = Ports{Found};
-                         end
-                         obj.SerialPort = IOPort('OpenSerialPort', PortString, 'BaudRate=115200, OutputBufferSize=8000, DTR=1');
-                     else
-                         error('No valid Bpod serial port detected.')
-                     end
-                     BpodSerialWrite(char(54), 'uint8');
-                     tic
-                     while BpodSerialBytesAvailable == 0
-                         if toc > 1
-                             break
-                         end
-                     end
-                     BpodSerialRead(BpodSerialBytesAvailable, 'uint8');
+                    end
+                    if Found ~= 0
+                        if ispc
+                            PortString = ['\\.\' Ports{Found}];
+                        else
+                            PortString = Ports{Found};
+                        end
+                        obj.SerialPort = IOPort('OpenSerialPort', PortString, 'BaudRate=115200, OutputBufferSize=8000, DTR=1');
+                    else
+                        error('No valid Bpod serial port detected.')
+                    end
+                    BpodSerialWrite(char(54), 'uint8');
+                    tic
+                    while BpodSerialBytesAvailable == 0
+                        if toc > 1
+                            break
+                        end
+                    end
+                    BpodSerialRead(BpodSerialBytesAvailable, 'uint8');
             end
-
-
+            
+            
             disp(['Bpod connected on port ' Ports{Found}])
             obj.SystemSettings.LastCOMPort = Ports{Found};
             SaveBpodSystemSettings;
@@ -328,121 +315,248 @@ classdef BpodObject < handle
             obj.Graphics.StopButton = imread('StopButton.bmp');
             obj.GUIHandles.RunButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [718 130 60 60], 'Callback', 'RunProtocol(''StartPause'')', 'CData', obj.Graphics.GoButton, 'TooltipString', 'Run selected protocol');
             obj.GUIHandles.EndButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [718 50 60 60], 'Callback', 'RunProtocol(''Stop'')', 'CData', obj.Graphics.StopButton, 'TooltipString', 'End session');
-
-
             obj.Graphics.OffButton = imread('ButtonOff.bmp');
             obj.Graphics.OffButtonDark = imread('ButtonOff_dark.bmp');
             obj.Graphics.OnButton = imread('ButtonOn.bmp');
+            obj.Graphics.OnButtonDark = imread('ButtonOn_dark.bmp');
             obj.Graphics.SoftTriggerButton = imread('BpodSoftTrigger.bmp');
             obj.Graphics.SoftTriggerActiveButton = imread('BpodSoftTrigger_active.bmp');
             obj.Graphics.SettingsButton = imread('SettingsButton.bmp');
             obj.Graphics.DocButton = imread('DocButton.bmp');
             obj.Graphics.AddProtocolButton = imread('AddProtocolIcon.bmp');
-            obj.GUIHandles.SettingsButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [742 285 29 29], 'Callback', 'BpodSettingsMenu', 'CData', obj.Graphics.SettingsButton, 'TooltipString', 'Settings and calibration');
-            obj.GUIHandles.DocButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [695 285 29 29], 'Callback', 'BpodWiki', 'CData', obj.Graphics.DocButton, 'TooltipString', 'Documentation wiki');
-
-            obj.GUIHandles.PortValveButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 260 30 30], 'Callback', 'ManualOverride(1,1);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 1 valve');
-            obj.GUIHandles.PortValveButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 260 30 30], 'Callback', 'ManualOverride(1,2);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 2 valve');
-            obj.GUIHandles.PortValveButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 260 30 30], 'Callback', 'ManualOverride(1,3);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 3 valve');
-            obj.GUIHandles.PortValveButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 260 30 30], 'Callback', 'ManualOverride(1,4);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 4 valve');
-            obj.GUIHandles.PortValveButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 260 30 30], 'Callback', 'ManualOverride(1,5);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 5 valve');
-            obj.GUIHandles.PortValveButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 260 30 30], 'Callback', 'ManualOverride(1,6);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 6 valve');
-            obj.GUIHandles.PortValveButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 260 30 30], 'Callback', 'ManualOverride(1,7);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 7 valve');
-            obj.GUIHandles.PortValveButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 260 30 30], 'Callback', 'ManualOverride(1,8);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 8 valve');
-
-            obj.GUIHandles.PortLEDButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 220 30 30], 'Callback', 'ManualOverride(2,1);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 1 LED');
-            obj.GUIHandles.PortLEDButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 220 30 30], 'Callback', 'ManualOverride(2,2);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 2 LED');
-            obj.GUIHandles.PortLEDButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 220 30 30], 'Callback', 'ManualOverride(2,3);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 3 LED');
-            obj.GUIHandles.PortLEDButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 220 30 30], 'Callback', 'ManualOverride(2,4);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 4 LED');
-            obj.GUIHandles.PortLEDButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 220 30 30], 'Callback', 'ManualOverride(2,5);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 5 LED');
-            obj.GUIHandles.PortLEDButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 220 30 30], 'Callback', 'ManualOverride(2,6);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 6 LED');
-            obj.GUIHandles.PortLEDButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 220 30 30], 'Callback', 'ManualOverride(2,7);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 7 LED');
-            obj.GUIHandles.PortLEDButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 220 30 30], 'Callback', 'ManualOverride(2,8);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle port 8 LED');
-
-            obj.GUIHandles.PortvPokeButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 180 30 30], 'Callback', 'ManualOverride(3,1);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 1 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 180 30 30], 'Callback', 'ManualOverride(3,2);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 2 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 180 30 30], 'Callback', 'ManualOverride(3,3);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 3 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 180 30 30], 'Callback', 'ManualOverride(3,4);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 4 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 180 30 30], 'Callback', 'ManualOverride(3,5);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 5 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 180 30 30], 'Callback', 'ManualOverride(3,6);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 6 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 180 30 30], 'Callback', 'ManualOverride(3,7);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 7 virtual photogate');
-            obj.GUIHandles.PortvPokeButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 180 30 30], 'Callback', 'ManualOverride(3,8);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Port 8 virtual photogate');
-
-            obj.GUIHandles.BNCInputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [525 243 30 30], 'Callback', 'ManualOverride(4,1);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Spoof BNC Input 1');
-            obj.GUIHandles.BNCInputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [565 243 30 30], 'Callback', 'ManualOverride(4,2);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Spoof BNC Input 2');
-
-            obj.GUIHandles.BNCOutputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [605 243 30 30], 'Callback', 'ManualOverride(5,1);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle TTL: BNC Output 1');
-            obj.GUIHandles.BNCOutputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [645 243 30 30], 'Callback', 'ManualOverride(5,2);', 'CData', obj.Graphics.OffButton, 'TooltipString', 'Toggle TTL:BNC Output 2');
-
+            obj.GUIHandles.SettingsButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [750 275 29 29], 'Callback', 'BpodSettingsMenu', 'CData', obj.Graphics.SettingsButton, 'TooltipString', 'Settings and calibration');
+            obj.GUIHandles.DocButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [700 275 29 29], 'Callback', 'BpodWiki', 'CData', obj.Graphics.DocButton, 'TooltipString', 'Documentation wiki');
+            
+            obj.GUIHandles.PortValveButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 260 30 30], 'Callback', 'ManualOverride(1,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 1 valve');
+            obj.GUIHandles.PortValveButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 260 30 30], 'Callback', 'ManualOverride(1,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 2 valve');
+            obj.GUIHandles.PortValveButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 260 30 30], 'Callback', 'ManualOverride(1,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 3 valve');
+            obj.GUIHandles.PortValveButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 260 30 30], 'Callback', 'ManualOverride(1,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 4 valve');
+            obj.GUIHandles.PortValveButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 260 30 30], 'Callback', 'ManualOverride(1,5);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 5 valve');
+            obj.GUIHandles.PortValveButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 260 30 30], 'Callback', 'ManualOverride(1,6);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 6 valve');
+            obj.GUIHandles.PortValveButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 260 30 30], 'Callback', 'ManualOverride(1,7);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 7 valve');
+            obj.GUIHandles.PortValveButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 260 30 30], 'Callback', 'ManualOverride(1,8);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 8 valve');
+            
+            obj.GUIHandles.PortLEDButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 220 30 30], 'Callback', 'ManualOverride(2,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 1 LED');
+            obj.GUIHandles.PortLEDButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 220 30 30], 'Callback', 'ManualOverride(2,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 2 LED');
+            obj.GUIHandles.PortLEDButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 220 30 30], 'Callback', 'ManualOverride(2,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 3 LED');
+            obj.GUIHandles.PortLEDButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 220 30 30], 'Callback', 'ManualOverride(2,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 4 LED');
+            obj.GUIHandles.PortLEDButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 220 30 30], 'Callback', 'ManualOverride(2,5);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 5 LED');
+            obj.GUIHandles.PortLEDButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 220 30 30], 'Callback', 'ManualOverride(2,6);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 6 LED');
+            obj.GUIHandles.PortLEDButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 220 30 30], 'Callback', 'ManualOverride(2,7);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 7 LED');
+            obj.GUIHandles.PortLEDButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 220 30 30], 'Callback', 'ManualOverride(2,8);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle port 8 LED');
+            
+            obj.GUIHandles.PortvPokeButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 180 30 30], 'Callback', 'ManualOverride(3,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 1 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 180 30 30], 'Callback', 'ManualOverride(3,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 2 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 180 30 30], 'Callback', 'ManualOverride(3,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 3 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 180 30 30], 'Callback', 'ManualOverride(3,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 4 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(5) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [354 180 30 30], 'Callback', 'ManualOverride(3,5);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 5 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(6) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [395 180 30 30], 'Callback', 'ManualOverride(3,6);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 6 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(7) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [436 180 30 30], 'Callback', 'ManualOverride(3,7);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 7 virtual photogate');
+            obj.GUIHandles.PortvPokeButton(8) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [477 180 30 30], 'Callback', 'ManualOverride(3,8);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Port 8 virtual photogate');
+            
+            obj.GUIHandles.BNCInputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [525 243 30 30], 'Callback', 'ManualOverride(4,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof BNC Input 1');
+            obj.GUIHandles.BNCInputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [565 243 30 30], 'Callback', 'ManualOverride(4,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof BNC Input 2');
+            
+            obj.GUIHandles.BNCOutputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [605 243 30 30], 'Callback', 'ManualOverride(5,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: BNC Output 1');
+            obj.GUIHandles.BNCOutputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [645 243 30 30], 'Callback', 'ManualOverride(5,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL:BNC Output 2');
+            
             obj.GUIHandles.InputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 77 30 30], 'Callback', 'ManualOverride(6,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
             obj.GUIHandles.InputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 77 30 30], 'Callback', 'ManualOverride(6,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-            obj.GUIHandles.InputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 77 30 30], 'Callback', 'ManualOverride(6,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-            obj.GUIHandles.InputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 77 30 30], 'Callback', 'ManualOverride(6,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-
-
+            if obj.FirmwareBuild < 8
+                obj.GUIHandles.InputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 77 30 30], 'Callback', 'ManualOverride(6,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+                obj.GUIHandles.InputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 77 30 30], 'Callback', 'ManualOverride(6,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+            end
+            
             obj.GUIHandles.OutputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 36 30 30], 'Callback', 'ManualOverride(7,1);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
             obj.GUIHandles.OutputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 36 30 30], 'Callback', 'ManualOverride(7,2);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
             obj.GUIHandles.OutputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 36 30 30], 'Callback', 'ManualOverride(7,3);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-            obj.GUIHandles.OutputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 36 30 30], 'Callback', 'ManualOverride(7,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-
-            obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [363 32 40 40], 'Callback', 'ManualOverride(8,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
-
-            obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [414 32 40 40], 'Callback', 'ManualOverride(9,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
-            obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(10,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
-
+            if obj.FirmwareBuild < 8
+                obj.GUIHandles.OutputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 36 30 30], 'Callback', 'ManualOverride(7,4);', 'CData', obj.Graphics.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
+            end
+            if obj.FirmwareBuild < 8
+                obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [363 32 40 40], 'Callback', 'ManualOverride(8,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
+                obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [414 32 40 40], 'Callback', 'ManualOverride(9,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
+                obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(10,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
+                obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [363 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [414 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [465 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                
+            else
+                obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [320 32 40 40], 'Callback', 'ManualOverride(8,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
+                obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [370 32 40 40], 'Callback', 'ManualOverride(9,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
+                obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [420 32 40 40], 'Callback', 'ManualOverride(10,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
+                obj.GUIHandles.HWSerialTriggerButton3 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [470 32 40 40], 'Callback', 'ManualOverride(11,0);', 'CData', obj.Graphics.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 3');
+                obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [320 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [370 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [420 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                obj.GUIHandles.HWSerialCodeSelector3 = uicontrol('Style', 'edit', 'String', '0', 'Position', [470 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+            end
             obj.GUIHandles.CurrentStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 268 115 20], 'FontWeight', 'bold', 'FontSize', 9);
             obj.GUIHandles.PreviousStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 219 115 20], 'FontWeight', 'bold', 'FontSize', 9);
             obj.GUIHandles.LastEventDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 169 115 20], 'FontWeight', 'bold', 'FontSize', 9);
             obj.GUIHandles.TimeDisplay = uicontrol('Style', 'text', 'String', '0', 'Position', [12 117 115 20], 'FontWeight', 'bold', 'FontSize', 9);
-            obj.GUIHandles.CxnDisplay = uicontrol('Style', 'text', 'String', 'Idle', 'Position', [12 62 115 20], 'FontWeight', 'bold', 'FontSize', 9);
-            obj.GUIHandles.ProtocolSelector = uicontrol('Style', 'listbox', 'String', 'None Loaded', 'Position', [520 45 185 150], 'FontWeight', 'bold', 'FontSize', 11, 'BackgroundColor', [.8 .8 .8]);
-            obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [363 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-            obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [414 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-            obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [465 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-
+            obj.GUIHandles.CxnDisplay = uicontrol('Style', 'text', 'String', 'Idle', 'Position', [12 65 115 20], 'FontWeight', 'bold', 'FontSize', 9);
+            obj.GUIHandles.ProtocolSelector = uicontrol('Style', 'listbox', 'String', 'None Loaded', 'Position', [520 45 185 150], 'Callback', 'global BpodSystem; BpodSystem.ProtocolSelectorNavigate;', 'FontWeight', 'bold', 'FontSize', 11, 'BackgroundColor', [.8 .8 .8]);
+            
             % Remove all the nasty borders around pushbuttons on platforms besides win7
             if isempty(strfind(obj.HostOS, 'Windows 7'))
                 handles = findjobj('class', 'pushbutton');
                 set(handles, 'border', []);
             end
-
+            
             try
                 jScrollPane = findjobj(obj.GUIHandles.ProtocolSelector); % get the scroll-pane object
                 jListbox = jScrollPane.getViewport.getComponent(0);
                 set(jListbox, 'SelectionBackground',java.awt.Color.red); % option #1
             catch
             end
-
+            %              set(obj.GUIHandles.MainFig, 'Color', [.37 .37 .37])
             ha = axes('units','normalized', 'position',[0 0 1 1]);
             uistack(ha,'bottom');
-            if obj.EmulatorMode == 0
-                BG = imread('ConsoleBG.bmp');
-            else
-                BG = imread('ConsoleBG_EMU.bmp');
-            end
+            BG = imread('ConsoleBG2.bmp');
             image(BG); axis off;
+            if obj.FirmwareBuild < 8
+                ver = '5';
+            else
+                ver = '7';
+            end
+            FontName = 'OCRASTD';
+            % Add labels
+            LabelFontColor = [0.8 0.8 0.8];
+            if obj.EmulatorMode == 0
+                Title = 'Bpod Console';
+                TitleColor = LabelFontColor;
+            else
+                Title = 'Bpod Emulator';
+                TitleColor = [0.9 0 0];
+            end
+            text(15, 30, Title, 'FontName', FontName, 'FontSize', 20, 'Color', TitleColor);
+            line([280 770], [30 30], 'Color', LabelFontColor, 'LineWidth', 4);
+            text(620, 380,['r0.' ver ' beta'], 'FontName', FontName, 'FontSize', 20, 'Color', LabelFontColor);
+            line([10 610], [380 380], 'Color', LabelFontColor, 'LineWidth', 4);
+            text(10, 102,'Current State', 'FontName', FontName, 'FontSize', 10, 'Color', LabelFontColor);
+            text(10, 153,'Previous State', 'FontName', FontName, 'FontSize', 10, 'Color', LabelFontColor);
+            text(10, 204,'Last Event', 'FontName', FontName, 'FontSize', 10, 'Color', LabelFontColor);
+            text(10, 255,'Trial-Start', 'FontName', FontName, 'FontSize', 10, 'Color', LabelFontColor);
+            text(10, 306,'Link Status', 'FontName', FontName, 'FontSize', 10, 'Color', LabelFontColor);
+            text(40, 65,'Info', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            line([10 130], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            text(269, 65,'Port Override', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            line([170 505], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            text(525, 65,'BNC Override', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            line([525 675], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            text(690, 65,'Settings', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            line([690 790], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            text(520, 180,'Protocol Select', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            line([520 705], [195 195], 'Color', LabelFontColor, 'LineWidth', 2);
+            Pos = 198;
+            for x = 1:8
+                text(Pos, 100,num2str(x), 'FontName', FontName, 'FontSize', 12, 'Color', LabelFontColor);
+                Pos = Pos + 41;
+            end
+            Pos = 533;
+            for x = 1:2
+                text(Pos, 115,num2str(x), 'FontName', FontName, 'FontSize', 12, 'Color', LabelFontColor);
+                Pos = Pos + 41;
+            end
+            Pos = 613;
+            for x = 1:2
+                text(Pos, 115,num2str(x), 'FontName', FontName, 'FontSize', 12, 'Color', LabelFontColor);
+                Pos = Pos + 41;
+            end
+            Pos = 198;
+            for x = 1:3
+                text(Pos, 280,num2str(x), 'FontName', FontName, 'FontSize', 12, 'Color', LabelFontColor);
+                Pos = Pos + 41;
+            end
+            if obj.FirmwareBuild < 8
+                text(170, 250,'Wire Override', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+                line([170 350], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+            else
+                text(190, 250,'Wire I/O', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+                line([170 305], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                text(350, 250,'Serial Out', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+                line([320 510], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+            end
+            text(145, 125,'H2O', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(145, 165,'LED', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(145, 205,'IR', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(145, 310,'In', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(145, 350,'Out', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(547, 95,'In', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(620, 95,'Out', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(322, 280,'USB', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(372, 280,'HW1', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(422, 280,'HW2', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+            text(472, 280,'HW3', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
             set(ha,'handlevisibility','off','visible','off');
             set(obj.GUIHandles.MainFig,'handlevisibility','off');
-
-            % Load protocols into selector
-            ProtocolPath = fullfile(obj.BpodPath,'Protocols');
-            Candidates = dir(ProtocolPath);
+            obj.ProtocolRoot = fullfile(obj.BpodPath,'Protocols');
+            obj.loadProtocols;
+            obj.ProtocolSelectorLastValue = 1;
+        end
+        function obj = loadProtocols(obj)
+            if strcmp(obj.ProtocolRoot, fullfile(obj.BpodPath,'Protocols'))
+                startPos = 3;
+            else
+                startPos = 2;
+            end
+            Candidates = dir(obj.ProtocolRoot);
             ProtocolNames = cell(1);
-            nCandidates = length(Candidates)-2;
             nProtocols = 0;
-            if nCandidates > 0
-                for x = 3:length(Candidates)
-                    if Candidates(x).isdir
-                        nProtocols = nProtocols + 1;
-                        ProtocolNames{nProtocols} = Candidates(x).name;
+            for x = startPos:length(Candidates)
+                if Candidates(x).isdir
+                    ProtocolFolder = fullfile(obj.ProtocolRoot, Candidates(x).name);
+                    Contents = dir(ProtocolFolder);
+                    nItems = length(Contents);
+                    Found = 0;
+                    for y = 3:nItems
+                        if strcmp(Contents(y).name, [Candidates(x).name '.m'])
+                            Found = 1;
+                        end
                     end
+                    if Found
+                        ProtocolName = Candidates(x).name;
+                    else
+                        ProtocolName = ['<' Candidates(x).name '>'];
+                    end
+                    nProtocols = nProtocols + 1;
+                    ProtocolNames{nProtocols} = ProtocolName;
                 end
             end
             if isempty(ProtocolNames)
                 ProtocolNames = {'No Protocols Found'};
+            else
+                % Sort to put organizing directories first
+                Types = ones(1,nProtocols);
+                for i = 1:nProtocols
+                    ProtocolName = ProtocolNames{i};
+                    if ProtocolName(1) == '<'
+                        Types(i) = 0;
+                    end
+                end
+                [~, Order] = sort(Types);
+                ProtocolNames = ProtocolNames(Order);
             end
             set(obj.GUIHandles.ProtocolSelector, 'String', ProtocolNames);
         end
+        function obj = ProtocolSelectorNavigate(obj)
+            currentValue = get(obj.GUIHandles.ProtocolSelector, 'Value');
+            if currentValue == obj.ProtocolSelectorLastValue
+                String = get(obj.GUIHandles.ProtocolSelector, 'String');
+                Candidate = String{currentValue};
+                if Candidate(1) == '<'
+                    FolderName = Candidate(2:end-1);
+                    set(obj.GUIHandles.ProtocolSelector, 'Value', 1);
+                    if FolderName(1) == '.'
+                        obj.ProtocolRoot = fullfile(obj.BpodPath,'Protocols');
+                    else
+                        obj.ProtocolRoot = fullfile(obj.ProtocolRoot, FolderName);
+                    end
+                    obj.loadProtocols;
+                end
+            end
+            obj.ProtocolSelectorLastValue = currentValue;
+        end
     end
 end
-

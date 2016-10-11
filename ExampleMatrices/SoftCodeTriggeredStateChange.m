@@ -1,4 +1,4 @@
-% Example state matrix: Single state; one second pause
+% Example state matrix: Switches states when soft code 5 arrives
 
 sma = NewStateMatrix();
 

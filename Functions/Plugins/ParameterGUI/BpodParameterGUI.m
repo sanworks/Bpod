@@ -113,8 +113,11 @@ switch Op
                     case 'popupmenu'
                         BpodSystem.GUIData.ParameterGUI.Styles(ParamNum) = 4;
                         BpodSystem.GUIHandles.ParameterGUI.Params(ParamNum) = uicontrol('Style', 'popupmenu', 'String', ThisParamString, 'Value', ThisParam, 'Position', [HPos+220 VPos+InPanelPos+2 200 25], 'FontWeight', 'normal', 'FontSize', 12, 'BackgroundColor','white', 'FontName', 'Arial','HorizontalAlignment','Center');
+                    case 'pushbutton'
+                        BpodSystem.GUIData.ParameterGUI.Styles(ParamNum) = 5;
+                        BpodSystem.GUIHandles.ParameterGUI.Params(ParamNum) = uicontrol('Style', 'pushbutton', 'String', ThisParamName, 'Position', [HPos+220 VPos+InPanelPos+2 200 25], 'FontWeight', 'normal', 'FontSize', 12, 'BackgroundColor','white', 'FontName', 'Arial','HorizontalAlignment','Center', 'Callback', ThisParam);
                     otherwise
-                        error('Invalid parameter style specified. Valid parameters are: ''edit'', ''text'', ''checkbox'', ''popupmenu''');
+                        error('Invalid parameter style specified. Valid parameters are: ''edit'', ''text'', ''checkbox'', ''popupmenu'', ''button''');
                 end
                 InPanelPos = InPanelPos + 35;
                 ParamNum = ParamNum + 1;
@@ -180,7 +183,9 @@ switch Op
                         set(ThisParamHandle, 'Value', GUIParam);
                     end
             end
-            BpodSystem.GUIData.ParameterGUI.LastParamValues{p} = GUIParam;
+            if ThisParamStyle ~= 5
+                BpodSystem.GUIData.ParameterGUI.LastParamValues{p} = GUIParam;
+            end
         end
     otherwise
     error('ParameterGUI must be called with a valid op code: ''init'' or ''sync''');

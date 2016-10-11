@@ -8,7 +8,6 @@ import java.io.*
 input_socket = Socket;
 Address = InetSocketAddress(IP, Port);
 input_socket.connect(Address, 2000);
-
 input_stream   = input_socket.getInputStream;
 d_input_stream = DataInputStream(input_stream);
 bytes_available = input_stream.available;

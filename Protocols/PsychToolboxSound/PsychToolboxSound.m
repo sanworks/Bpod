@@ -99,6 +99,11 @@ BpodSystem.SoftCodeHandlerFunction = 'SoftCodeHandler_PlaySound';
 %% Main trial loop
 for currentTrial = 1:MaxTrials
     S = BpodParameterGUI('sync', S); % Sync parameters with BpodParameterGUI plugin
+    if S.GUI.PunishSound
+        PunishOutputAction = {'SoftCode', 3};
+    else
+        PunishOutputAction = {};
+    end
     LeftSound = GenerateSineWave(SF, S.GUI.SinWaveFreqLeft, S.GUI.SoundDuration); % Sampling freq (hz), Sine frequency (hz), duration (s)
     RightSound = GenerateSineWave(SF, S.GUI.SinWaveFreqRight, S.GUI.SoundDuration); % Sampling freq (hz), Sine frequency (hz), duration (s)
     PsychToolboxSoundServer('Load', 1, LeftSound);
@@ -146,7 +151,7 @@ for currentTrial = 1:MaxTrials
     sma = AddState(sma, 'Name', 'Punish', ...
         'Timer', S.GUI.PunishTimeoutDuration,...
         'StateChangeConditions', {'Tup', 'exit'},...
-        'OutputActions', {'SoftCode', 3});
+        'OutputActions', PunishOutputAction);
     sma = AddState(sma, 'Name', 'EarlyWithdrawalPunish', ...
         'Timer', S.GUI.PunishTimeoutDuration,...
         'StateChangeConditions', {'Tup', 'exit'},...

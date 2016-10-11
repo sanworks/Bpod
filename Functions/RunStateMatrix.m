@@ -50,6 +50,16 @@ BpodSystem.CurrentStateName = StateNames{1};
 InputMatrix = BpodSystem.StateMatrix.InputMatrix;
 GlobalTimerMatrix = BpodSystem.StateMatrix.GlobalTimerMatrix;
 GlobalCounterMatrix = BpodSystem.StateMatrix.GlobalCounterMatrix;
+if BpodSystem.FirmwareBuild > 7
+    ConditionMatrix = BpodSystem.StateMatrix.ConditionMatrix;
+    GlobalTimerOffset = 70;
+    GlobalCounterOffset = 75;
+    ConditionOffset = 80;
+else
+    GlobalTimerOffset = 41;
+    GlobalCounterOffset = 46;
+    ConditionOffset = 80;
+end
 nTotalStates = length(StateNames);
 UpdateBpodCommanderGUI; % Reads BpodSystem.HardwareState and BpodSystem.LastEvent to commander GUI.
 
@@ -107,12 +117,16 @@ while BpodSystem.InStateMatrix
                     if CurrentEvent(i) == 256
                         BpodSystem.InStateMatrix = 0;
                         break
-                    elseif CurrentEvent(i) < 41
+                    elseif CurrentEvent(i) < GlobalTimerOffset
                         NewState = InputMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i));
-                    elseif CurrentEvent(i) < 46
-                        NewState = GlobalTimerMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-40);
+                    elseif CurrentEvent(i) < GlobalCounterOffset
+                        NewState = GlobalTimerMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-(GlobalTimerOffset-1));
+                    elseif CurrentEvent(i) < ConditionOffset
+                        NewState = GlobalCounterMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-(GlobalCounterOffset-1));
+                    elseif CurrentEvent(i) < 85
+                        NewState = ConditionMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-(ConditionOffset-1));
                     else
-                        NewState = GlobalCounterMatrix(BpodSystem.CurrentStateCode, CurrentEvent(i)-45);
+                        error('Error: Unknown event code returned');
                     end
                     if NewState ~= BpodSystem.CurrentStateCode
                         TransitionEventFound = 1;
@@ -135,23 +149,23 @@ while BpodSystem.InStateMatrix
                             BpodSystem.Emulator.CurrentState = NewState;
                             BpodSystem.Emulator.StateStartTime = BpodSystem.Emulator.CurrentTime;
                             % Set global timer end-time
-                            ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,7);
+                            ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.OutputPos.GlobalTimerTrig);
                             if ThisGlobalTimer ~= 0
                                 BpodSystem.Emulator.GlobalTimerEnd(ThisGlobalTimer) = BpodSystem.Emulator.CurrentTime + BpodSystem.StateMatrix.GlobalTimers(ThisGlobalTimer);
                                 BpodSystem.Emulator.GlobalTimersActive(ThisGlobalTimer) = 1;
                             end
                             % Cancel global timers
-                            ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,8);
+                            ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.OutputPos.GlobalTimerCancel);
                             if ThisGlobalTimer ~= 0
                                 BpodSystem.Emulator.GlobalTimersActive(ThisGlobalTimer) = 0;
                             end
                             % Reset global counter counts
-                            ThisGlobalCounter = BpodSystem.StateMatrix.OutputMatrix(NewState,9);
+                            ThisGlobalCounter = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.OutputPos.GlobalCounterReset);
                             if ThisGlobalCounter ~= 0
                                 BpodSystem.Emulator.GlobalCounterCounts(ThisGlobalCounter) = 0;
                             end
                             % Update soft code
-                            BpodSystem.Emulator.SoftCode = BpodSystem.StateMatrix.OutputMatrix(NewState,6);
+                            BpodSystem.Emulator.SoftCode = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.OutputPos.SoftCode);
                         end
                     else
                         if BpodSystem.EmulatorMode == 1
@@ -245,10 +259,13 @@ if CurrentState > 0
     WireState = BpodSystem.StateMatrix.OutputMatrix(CurrentState, 3);
     BpodSystem.HardwareState.WireOutputs = bitget(WireState,1:4);
     
-    BpodSystem.HardwareState.PWMLines(1:8) = BpodSystem.StateMatrix.OutputMatrix(CurrentState, 10:17);
+    BpodSystem.HardwareState.PWMLines(1:8) = BpodSystem.StateMatrix.OutputMatrix(CurrentState, BpodSystem.OutputPos.PWM:BpodSystem.OutputPos.PWM+7);
     BpodSystem.HardwareState.Serial1Code = BpodSystem.StateMatrix.OutputMatrix(CurrentState,4);
     BpodSystem.HardwareState.Serial2Code = BpodSystem.StateMatrix.OutputMatrix(CurrentState,5);
-    BpodSystem.HardwareState.SoftCode = BpodSystem.StateMatrix.OutputMatrix(CurrentState,6);
+    if BpodSystem.FirmwareBuild > 7
+        BpodSystem.HardwareState.Serial3Code = BpodSystem.StateMatrix.OutputMatrix(CurrentState,6);
+    end
+    BpodSystem.HardwareState.SoftCode = BpodSystem.StateMatrix.OutputMatrix(CurrentState,BpodSystem.OutputPos.SoftCode);
 else
     BpodSystem.HardwareState.Valves = zeros(1,8);
     BpodSystem.HardwareState.PortSensors = zeros(1,8);

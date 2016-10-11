@@ -39,8 +39,8 @@ nStates = length(sma.StatesDefined);
 nStatesInManifest = sma.nStatesInManifest;
 StateNumber = find(strcmp(StateName, sma.StateNames));
 CurrentStateInManifest = nStatesInManifest + 1;
-if sum(sma.StatesDefined) == 128
-    error('Error: the state matrix can have a maximum of 128 states.')
+if sum(sma.StatesDefined) == BpodSystem.MaxStates
+    error(['Error: the state matrix can have a maximum of ' num2str(BpodSystem.MaxStates) ' states.'])
 end
 if strcmp(sma.StateNames{1},'Placeholder')
     CurrentState = 1;
@@ -58,8 +58,15 @@ end
 sma.StateNames{CurrentState} = StateName;
 sma.Manifest{CurrentStateInManifest} = StateName;
 sma.nStatesInManifest = sma.nStatesInManifest + 1;
-sma.InputMatrix(CurrentState,:) = ones(1,40)*CurrentState; % Hard-coded matrix sizes (for efficiency) should be adjusted if changing state matrix composition
-sma.OutputMatrix(CurrentState,:) = zeros(1,17);
+if BpodSystem.FirmwareBuild < 8
+    nInputColumns = BpodSystem.nEvents-10;
+else
+    nInputColumns = BpodSystem.nEvents-15;
+    sma.ConditionMatrix(CurrentState,:) = ones(1,5)*CurrentState;
+end
+sma.InputMatrix(CurrentState,:) = ones(1,nInputColumns)*CurrentState; % Hard-coded matrix sizes (for efficiency) should be adjusted if changing state matrix composition
+sma.OutputMatrix(CurrentState,:) = zeros(1,BpodSystem.nOutputActions);
+
 sma.GlobalTimerMatrix(CurrentState,:) = ones(1,5)*CurrentState;
 sma.GlobalCounterMatrix(CurrentState,:) = ones(1,5)*CurrentState;
 sma.StateTimers(CurrentState) = StateTimer;
@@ -88,11 +95,11 @@ for x = 1:2:length(StateChangeConditions)
         TargetStateNumber = NaN;
     end
     if ~isempty(CandidateEventCode)
-    if CandidateEventCode > 40
+    if CandidateEventCode > nInputColumns
         CandidateEventName = StateChangeConditions{x};
         if length(CandidateEventName) > 4
             if sum(lower(CandidateEventName(length(CandidateEventName)-3:length(CandidateEventName))) == '_end') == 4
-                if CandidateEventCode < 46
+                if CandidateEventCode < nInputColumns+6
                     % This is a transition for a global timer. Add to global timer matrix.
                     GlobalTimerNumber = str2double(CandidateEventName(length(CandidateEventName) - 4));
                     if ~isnan(GlobalTimerNumber)
@@ -110,7 +117,13 @@ for x = 1:2:length(StateChangeConditions)
                     end
                 end
             else
-                EventSpellingErrorMessage(ThisStateName);
+                % This is a transition for a condition. Add to condition matrix
+                ConditionNumber = str2double(CandidateEventName(length(CandidateEventName)));
+                if ~isnan(ConditionNumber)
+                    sma.ConditionMatrix(CurrentState, ConditionNumber) = TargetStateNumber;
+                else
+                    EventSpellingErrorMessage(ThisStateName);
+                end
             end
         else
             EventSpellingErrorMessage(ThisStateName);
@@ -137,9 +150,11 @@ for x = 1:2:length(OutputActions)
                 Value = 2^(Value-1);
                 sma.OutputMatrix(CurrentState,1) = Value;
             case 2
-                sma.OutputMatrix(CurrentState,9+Value) = 255;
+                sma.OutputMatrix(CurrentState,BpodSystem.OutputPos.PWM+Value-1) = 255;
             case 3
-                
+                for i = 1:8
+                    sma.OutputMatrix(CurrentState,BpodSystem.OutputPos.PWM+Value-1) = bitget(Value, i)*255;
+                end
         end
     else
         TargetEventCode = find(strcmp(OutputActions{x}, OutputActionNames));

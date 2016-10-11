@@ -6,6 +6,10 @@ S = BpodSystem.ProtocolSettings; % Load settings chosen in launch manager into c
 if isempty(fieldnames(S))  % If settings file was an empty struct, populate struct with default settings
     S.GUI.StimulusDuration = 0.1; % Stimulus duration in seconds
     S.GUI.RewardAmount = 5; %ul
+    S.GUI.FlashLeftLight = 'FlashLights(1)';
+    S.GUIMeta.FlashLeftLight.Style = 'pushbutton';
+    S.GUI.FlashRightLight = 'FlashLights(3)';
+    S.GUIMeta.FlashRightLight.Style = 'pushbutton';
 end
 BpodParameterGUI('init', S); % Initialize parameter GUI plugin
 %% Define trials

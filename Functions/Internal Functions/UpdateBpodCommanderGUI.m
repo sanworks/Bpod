@@ -37,9 +37,9 @@ end
 ChangedValves = find((BpodSystem.HardwareState.Valves ~= BpodSystem.LastHardwareState.Valves));
 for x = ChangedValves
     if BpodSystem.HardwareState.Valves(x) == 1
-        set(BpodSystem.GUIHandles.PortValveButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.PortValveButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.PortValveButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.PortValveButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 
@@ -47,9 +47,9 @@ end
 ChangedPWM = find((BpodSystem.HardwareState.PWMLines ~= BpodSystem.LastHardwareState.PWMLines));
 for x = ChangedPWM
     if BpodSystem.HardwareState.PWMLines(x) > 0
-        set(BpodSystem.GUIHandles.PortLEDButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.PortLEDButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.PortLEDButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.PortLEDButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 
@@ -57,9 +57,9 @@ end
 ChangedV = find((BpodSystem.HardwareState.PortSensors ~= BpodSystem.LastHardwareState.PortSensors));
 for x = ChangedV
     if BpodSystem.HardwareState.PortSensors(x) == 1
-        set(BpodSystem.GUIHandles.PortvPokeButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.PortvPokeButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.PortvPokeButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.PortvPokeButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 
@@ -67,17 +67,17 @@ end
 ChangedBNCIn = find((BpodSystem.HardwareState.BNCInputs ~= BpodSystem.LastHardwareState.BNCInputs));
 for x = ChangedBNCIn
     if BpodSystem.HardwareState.BNCInputs(x) == 1
-        set(BpodSystem.GUIHandles.BNCInputButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.BNCInputButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.BNCInputButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.BNCInputButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 ChangedBNCOut = find((BpodSystem.HardwareState.BNCOutputs ~= BpodSystem.LastHardwareState.BNCOutputs));
 for x = ChangedBNCOut
     if BpodSystem.HardwareState.BNCOutputs(x) == 1
-        set(BpodSystem.GUIHandles.BNCOutputButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.BNCOutputButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.BNCOutputButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.BNCOutputButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 
@@ -85,17 +85,17 @@ end
 ChangedWireIn = find((BpodSystem.HardwareState.WireInputs ~= BpodSystem.LastHardwareState.WireInputs));
 for x = ChangedWireIn
     if BpodSystem.HardwareState.WireInputs(x) == 1
-        set(BpodSystem.GUIHandles.InputWireButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.InputWireButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.InputWireButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.InputWireButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 ChangedWireOut = find((BpodSystem.HardwareState.WireOutputs ~= BpodSystem.LastHardwareState.WireOutputs));
 for x = ChangedWireOut
     if BpodSystem.HardwareState.WireOutputs(x) == 1
-        set(BpodSystem.GUIHandles.OutputWireButton(x), 'CData', BpodSystem.Graphics.OnButton);
+        set(BpodSystem.GUIHandles.OutputWireButton(x), 'CData', BpodSystem.Graphics.OnButtonDark);
     else
-        set(BpodSystem.GUIHandles.OutputWireButton(x), 'CData', BpodSystem.Graphics.OffButton);
+        set(BpodSystem.GUIHandles.OutputWireButton(x), 'CData', BpodSystem.Graphics.OffButtonDark);
     end
 end
 

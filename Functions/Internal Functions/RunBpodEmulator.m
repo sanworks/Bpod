@@ -41,7 +41,7 @@ switch Op
         BpodSystem.Emulator.StateStartTime = BpodSystem.Emulator.CurrentTime;
         BpodSystem.Emulator.SoftCode = BpodSystem.StateMatrix.OutputMatrix(1,6);
         % Set global timer end-time (if triggered in first state)
-        ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(BpodSystem.Emulator.CurrentState,7);
+        ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(BpodSystem.Emulator.CurrentState,8);
         if ThisGlobalTimer ~= 0
             BpodSystem.Emulator.GlobalTimerEnd(ThisGlobalTimer) = BpodSystem.Emulator.CurrentTime + BpodSystem.StateMatrix.GlobalTimers(ThisGlobalTimer);
             BpodSystem.Emulator.GlobalTimersActive(ThisGlobalTimer) = 1;
@@ -56,8 +56,9 @@ switch Op
                 VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = ManualOverrideEvent;
             end
             % Evaluate condition transitions
-            ConditionEvent = 0;
+            
             for x = 1:5
+                ConditionEvent = 0;
                 if BpodSystem.Emulator.ConditionChannels(x) > 0
                     ConditionValue = BpodSystem.Emulator.ConditionValues(x);
                     if ManualOverrideEvent < 9
@@ -85,7 +86,7 @@ switch Op
                 if BpodSystem.Emulator.GlobalTimersActive(x) == 1
                     if BpodSystem.Emulator.CurrentTime > BpodSystem.Emulator.GlobalTimerEnd(x)
                         BpodSystem.Emulator.nCurrentEvents = BpodSystem.Emulator.nCurrentEvents + 1;
-                        VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 70+x;
+                        VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 69+x;
                         BpodSystem.Emulator.GlobalTimersActive(x) = 0;
                     end
                 end
@@ -95,10 +96,30 @@ switch Op
                 if BpodSystem.StateMatrix.GlobalCounterEvents(x) ~= 255
                     if BpodSystem.Emulator.GlobalCounterCounts(x) == BpodSystem.StateMatrix.GlobalCounterThresholds(x)
                         BpodSystem.Emulator.nCurrentEvents = BpodSystem.Emulator.nCurrentEvents + 1;
-                        VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 70+x;
+                        VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 74+x;
                     end
                     if VirtualCurrentEvents(1) == BpodSystem.StateMatrix.GlobalCounterEvents(x)
                         BpodSystem.Emulator.GlobalCounterCounts(x) = BpodSystem.Emulator.GlobalCounterCounts(x) + 1;
+                    end
+                end
+            end
+            % Evaluate condition transitions
+            for x = 1:5
+                if BpodSystem.StateMatrix.ConditionSet(x)
+                    TargetState = BpodSystem.StateMatrix.ConditionMatrix(BpodSystem.Emulator.CurrentState, x);
+                    if TargetState ~= BpodSystem.Emulator.CurrentState
+                        ThisChannel = BpodSystem.StateMatrix.ConditionChannels(x);
+                        if ThisChannel < 9
+                            HWState = BpodSystem.HardwareState.PortSensors(ThisChannel);
+                        elseif ThisChannel < 11
+                            HWState = BpodSystem.HardwareState.BNCInputs(ThisChannel-9);
+                        elseif ThisChannel < 13
+                            HWState = BpodSystem.HardwareState.WireInputs(ThisChannel-11);
+                        end
+                        if HWState == BpodSystem.StateMatrix.ConditionValues(x)
+                            BpodSystem.Emulator.nCurrentEvents = BpodSystem.Emulator.nCurrentEvents + 1;
+                            VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = 79+x;
+                        end
                     end
                 end
             end
@@ -127,6 +148,6 @@ switch Op
             OpCodeBytes = [2 BpodSystem.Emulator.SoftCode];
             VirtualCurrentEvents = [];
             BpodSystem.Emulator.SoftCode = 0;
-        end
+        end    
 end
 

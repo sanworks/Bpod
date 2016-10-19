@@ -1,3 +1,5 @@
+// Open a USB serial terminal for the module.
+// Numbers entered will be converted to bytes (not their ASCII values)
 byte inByte = 0;
 void setup() {
   // put your setup code here, to run once:

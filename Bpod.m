@@ -37,11 +37,12 @@ catch
     BpodSystem = BpodObject(BpodPath);
     % Check for font
     F = listfonts;
-    if sum(strcmp(F, 'OCRAStd')) == 0
+    if (sum(strcmp(F, 'OCRAStd')) == 0) && (sum(strcmp(F, 'OCR A Std')) == 0)
         disp('ALERT! Bpod needs to install a system font in order to continue.')
         input('Press enter to install the font...');
         try
             system(fullfile(BpodPath, 'Media', 'Fonts', 'OCRASTD.otf'));
+            error('After installing the font, please restart Bpod.')
         catch
             error('Bpod was unable to install the font. Please install it manually from /Bpod/Media/Fonts/OCRASTD')
         end

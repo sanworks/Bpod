@@ -83,8 +83,7 @@ if AllValid == 1
     % LiquidCalibrationManager to reflect the new pending measurements vector
     LiquidCalibrationManager('listbox1_Callback', LiquidCalibrationManager,[], handles)
     % Save file
-    loadBpodPath
-    TestSavePath = fullfile(BpodPath, 'Calibration Files');
+    TestSavePath = fullfile(BpodSystem.Path.BpodRoot, 'Calibration Files');
     if exist(TestSavePath) ~= 7
         mkdir(TestSavePath);
     end

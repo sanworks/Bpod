@@ -82,8 +82,7 @@ if ~isfield(handles, 'PendingMeasurements') % The OpeningFcn is being called for
     set(gcf, 'DockControls', 'off');
     handles.PendingMeasurements = cell(1,8);
     % Load existing liquid cal into handles structure
-    loadBpodPath
-    CalibrationFilePath = fullfile(BpodPath, 'Calibration Files', 'LiquidCalibration.mat');
+    CalibrationFilePath = fullfile(BpodSystem.Path.BpodRoot, 'Calibration Files', 'LiquidCalibration.mat');
     if exist(CalibrationFilePath) ~= 2
         % Calibration files were not found. Load template.
         CalibrationFilePath = fullfile(BpodPath, 'Bpod System Files', 'Main Functions', 'LiquidCalibrator', 'CalibrationFileTemplate.mat');
@@ -229,7 +228,7 @@ guidata(hObject, handles);
 clearvars -global Measurement2add
 % --- Executes on button press in pushbutton2.
 function pushbutton2_Callback(hObject, eventdata, handles)
-
+global BpodSystem
 % This button removes a calibration entry.
 
 CurrentValve = get(handles.listbox1, 'Value');
@@ -312,8 +311,7 @@ if isPendingMeasurement == 0
 end
 guidata(hObject, handles);
 % Save file
-loadBpodPath
-TestSavePath = fullfile(BpodPath, 'Calibration Files');
+TestSavePath = fullfile(BpodSystem.Path.BpodRoot, 'Calibration Files');
 if exist(TestSavePath) ~= 7
     mkdir(TestSavePath);
 end

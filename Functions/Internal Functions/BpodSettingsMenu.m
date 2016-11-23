@@ -26,17 +26,19 @@ uistack(ha,'bottom');
 BG = imread('SettingsMenuBG2.bmp');
 image(BG); axis off; drawnow;
 text(100, 25,'Settings Menu', 'FontName', 'OCRAStd', 'FontSize', 13, 'Color', [0.8 0.8 0.8]);
-ypos = 30;
+ypos = 20;
 LiquidCalButtonGFX = imread('WaterCalBW.bmp');
 BpodSystem.GUIHandles.LiquidCalLaunchButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @CalibrateValves, 'CData', LiquidCalButtonGFX, 'TooltipString', 'Calibrate valves for precise liquid delivery');
-SpeakerCalButtonGFX = imread('SpeakerCalButton.bmp'); ypos = ypos + 76;
+SpeakerCalButtonGFX = imread('SpeakerCalButton.bmp'); ypos = ypos + 65;
 BpodSystem.GUIHandles.SpeakerCalButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @CalibrateSound, 'CData', SpeakerCalButtonGFX, 'TooltipString', 'Calibrate auditory pure tone intensity');
-BonsaiButtonGFX = imread('BonsaiButton.bmp'); ypos = ypos + 76;
+BonsaiButtonGFX = imread('BonsaiButton.bmp'); ypos = ypos + 65;
 BpodSystem.GUIHandles.SoundCalLaunchButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @ConfigureBonsai, 'CData', BonsaiButtonGFX, 'TooltipString', 'Setup Bonsai socket connection');
-PortCalButtonGFX = imread('PortConfigButton.bmp'); ypos = ypos + 76;
+PortCalButtonGFX = imread('PortConfigButton.bmp'); ypos = ypos + 65;
 BpodSystem.GUIHandles.PortCalLaunchButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @ConfigurePorts, 'CData', PortCalButtonGFX, 'TooltipString', 'Configure low impedence inputs (ports and wire terminals)');
-SyncButtonGFX = imread('SyncConfigButton.bmp'); ypos = ypos + 76;
+SyncButtonGFX = imread('SyncConfigButton.bmp'); ypos = ypos + 65;
 BpodSystem.GUIHandles.SyncLaunchButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @ConfigureSync, 'CData', SyncButtonGFX, 'TooltipString', 'Configure state synchronization signal');
+FolderButtonGFX = imread('FolderSetupButton.bmp'); ypos = ypos + 65;
+BpodSystem.GUIHandles.SyncLaunchButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 32 40 40], 'Callback', @ConfigureFolders, 'CData', FolderButtonGFX, 'TooltipString', 'Select data and protocol root folders');
 
 function CalibrateValves(trash, othertrash)
 global BpodSystem
@@ -57,3 +59,8 @@ function ConfigurePorts(trash, othertrash)
 global BpodSystem
 close(BpodSystem.GUIHandles.SettingsMenuFig)
 BpodPortConfig;
+
+function ConfigureFolders(trash, othertrash)
+global BpodSystem
+close(BpodSystem.GUIHandles.SettingsMenuFig)
+BpodSystem.setupFolders;

@@ -1,8 +1,8 @@
 %{
 ----------------------------------------------------------------------------
 
-This file is part of the Bpod Project
-Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
+This file is part of the Sanworks Bpod repository
+Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -17,14 +17,9 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
-function [NewMessage OpCodeBytes VirtualCurrentEvents] = RunBpodEmulator(Op, ManualOverrideEvent)
+function [NewMessage, OpCodeBytes, VirtualCurrentEvents] = RunBpodEmulator(Op, ManualOverrideEvent)
 global BpodSystem
 VirtualCurrentEvents = zeros(1,10);
-if BpodSystem.FirmwareBuild < 8
-    TupState = 40;
-else
-    TupState = 29;
-end
 switch Op
     case 'init'
         BpodSystem.Emulator.nEvents = 0;
@@ -35,11 +30,14 @@ switch Op
         BpodSystem.Emulator.ConditionChannels = zeros(1,5);
         BpodSystem.Emulator.ConditionValues = zeros(1,5);
         BpodSystem.Emulator.Timestamps = zeros(1,10000);
-        BpodSystem.Emulator.MeaningfulTimer = (BpodSystem.StateMatrix.InputMatrix(:,TupState)' ~= 1:length(BpodSystem.StateMatrix.StatesDefined));
+        BpodSystem.Emulator.MeaningfulTimer = (BpodSystem.StateMatrix.StateTimerMatrix ~= 1:length(BpodSystem.StateMatrix.StatesDefined));
         BpodSystem.Emulator.CurrentTime = now*100000;
         BpodSystem.Emulator.MatrixStartTime = BpodSystem.Emulator.CurrentTime;
         BpodSystem.Emulator.StateStartTime = BpodSystem.Emulator.CurrentTime;
-        BpodSystem.Emulator.SoftCode = BpodSystem.StateMatrix.OutputMatrix(1,6);
+        BpodSystem.Emulator.SoftCode = BpodSystem.StateMatrix.OutputMatrix(1,BpodSystem.HardwareState.OutputType == 'X');
+        
+        % Continue updating HERE
+        
         % Set global timer end-time (if triggered in first state)
         ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(BpodSystem.Emulator.CurrentState,8);
         if ThisGlobalTimer ~= 0
@@ -128,7 +126,7 @@ switch Op
             StateTimer = BpodSystem.StateMatrix.StateTimers(BpodSystem.Emulator.CurrentState);
             if (TimeInState > StateTimer) && (BpodSystem.Emulator.MeaningfulTimer(BpodSystem.Emulator.CurrentState) == 1)
                 BpodSystem.Emulator.nCurrentEvents = BpodSystem.Emulator.nCurrentEvents + 1;
-                VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = TupState;
+                VirtualCurrentEvents(BpodSystem.Emulator.nCurrentEvents) = BpodSystem.HW.StateTimerPosition;
             end
             DominantEvent = VirtualCurrentEvents(1);
             if DominantEvent > 0

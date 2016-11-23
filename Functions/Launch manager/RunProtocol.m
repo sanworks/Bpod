@@ -21,49 +21,47 @@ function RunProtocol(Opstring)
 global BpodSystem
 switch Opstring
     case 'StartPause'
-        if BpodSystem.BeingUsed == 0
+        if BpodSystem.Status.BeingUsed == 0
             clear PB
             ProtocolNames = get(BpodSystem.GUIHandles.ProtocolSelector, 'String');
             SelectedProtocol = get(BpodSystem.GUIHandles.ProtocolSelector, 'Value');
             SelectedProtocolName = ProtocolNames{SelectedProtocol};
-            BpodSystem.CurrentProtocolName = SelectedProtocolName;
-            addpath(fullfile(BpodSystem.ProtocolRoot, SelectedProtocolName));
+            BpodSystem.Status.CurrentProtocolName = SelectedProtocolName;
+            addpath(fullfile(BpodSystem.Path.ProtocolFolder, SelectedProtocolName));
             LaunchManager;
         else
-            if BpodSystem.Pause == 0
+            if BpodSystem.Status.Pause == 0
                 disp('Pause requested. The system will pause after the current trial completes.')
-                BpodSystem.Pause = 1;
-                set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.Graphics.PauseRequestedButton, 'TooltipString', 'Pause scheduled after trial end'); 
+                BpodSystem.Status.Pause = 1;
+                set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.PauseRequestedButton, 'TooltipString', 'Pause scheduled after trial end'); 
             else
                 disp('Session resumed.')
-                BpodSystem.Pause = 0;
-                set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.Graphics.PauseButton, 'TooltipString', 'Press to pause session');
+                BpodSystem.Status.Pause = 0;
+                set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.PauseButton, 'TooltipString', 'Press to pause session');
             end
         end
     case 'Stop'
-        if ~isempty(BpodSystem.CurrentProtocolName)
+        if ~isempty(BpodSystem.Status.CurrentProtocolName)
             disp(' ')
-            disp([BpodSystem.CurrentProtocolName ' ended.'])
+            disp([BpodSystem.Status.CurrentProtocolName ' ended.'])
         end
-        rmpath(fullfile(BpodSystem.ProtocolRoot, BpodSystem.CurrentProtocolName));
-        BpodSystem.BeingUsed = 0;
-        BpodSystem.CurrentProtocolName = '';
-        BpodSystem.SettingsPath = '';
-        BpodSystem.Live = 0;
+        rmpath(fullfile(BpodSystem.Path.ProtocolFolder, BpodSystem.Status.CurrentProtocolName));
+        BpodSystem.Status.BeingUsed = 0;
+        BpodSystem.Status.CurrentProtocolName = '';
+        BpodSystem.Path.Settings = '';
+        BpodSystem.Status.Live = 0;
         if BpodSystem.EmulatorMode == 0
-            BpodSerialWrite('X', 'uint8');
+            BpodSystem.SerialPort.write('X', 'uint8');
             pause(.1);
-            if BpodSerialBytesAvailable > 0
-                BpodSerialRead(BpodSerialBytesAvailable, 'uint8');
+            nBytes = BpodSystem.SerialPort.bytesAvailable;
+            if nBytes > 0
+                BpodSystem.SerialPort.read(nBytes, 'uint8');
             end
-            BpodSystem.InStateMatrix = 0;
             if isfield(BpodSystem.PluginSerialPorts, 'TeensySoundServer')
                 TeensySoundServer('end');
-            end
-        else
-            BpodSystem.ManualOverrideFlag = 1;
-            BpodSystem.VirtualManualOverrideBytes = 'VXX';
+            end   
         end
+        BpodSystem.Status.InStateMatrix = 0;
         % Shut down protocol and plugin figures (should be made more general)
         try
             Figs = fields(BpodSystem.ProtocolFigures);
@@ -81,9 +79,9 @@ switch Opstring
             end
         catch
         end
-        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.Graphics.GoButton, 'TooltipString', 'Run selected protocol');
-        if BpodSystem.Pause == 1
-            BpodSystem.Pause = 0;
+        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.GoButton, 'TooltipString', 'Run selected protocol');
+        if BpodSystem.Status.Pause == 1
+            BpodSystem.Status.Pause = 0;
         end
         % ---- end Shut down Plugins
 end

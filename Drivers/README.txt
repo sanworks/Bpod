@@ -1,6 +1,1 @@
-The driver files in this folder are open source, and part of the Arduino program:
-
-http://www.arduino.cc/
-
-We supply these drivers for convenience, but we reccommend downloading the latest drivers from here:
-https://www.arduino.cc/en/Guide/ArduinoDue#toc8
+These drivers are part of the open source Arduino repository: http://arduino.cc. We thank the Arduino.cc team for providing them and keeping them current!

@@ -18,31 +18,17 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
 global BpodSystem
-if BpodSystem.EmulatorMode == 0
-    if BpodSerialBytesAvailable > 0
-        BpodSerialRead(BpodSerialBytesAvailable, 'uint8')
-    end
-end
 try
     close(BpodSystem.GUIHandles.LiveDispFig)
 catch
 end
-if BpodSystem.BeingUsed == 0
+if BpodSystem.Status.BeingUsed == 0
     if BpodSystem.EmulatorMode == 0
-        BpodSerialWrite('Z', 'uint8');
+        BpodSystem.SerialPort.write('Z', 'uint8');
     end
     pause(.1);
     delete(BpodSystem.GUIHandles.MainFig);
     if BpodSystem.EmulatorMode == 0
-        switch BpodSystem.ControlInterface
-        case 0 % Java
-            fclose(BpodSystem.SerialPort);
-            delete(BpodSystem.SerialPort);
-        case 1 % Psychtoolbox
-            IOPort('Close', BpodSystem.SerialPort);
-        end
-    
-        BpodSystem.SerialPort = [];
         if isfield(BpodSystem.PluginSerialPorts, 'TeensySoundServer')
             TeensySoundServer('end');
         end
@@ -57,8 +43,8 @@ if BpodSystem.BeingUsed == 0
        close(BpodSystem.GUIHandles.ConfigureBonsaiFig)
     catch
     end
+    clear global BpodSystem
 else
     msgbox('There is a running protocol. Please stop it first.')
     BpodErrorSound;
 end
-clear BpodSystem

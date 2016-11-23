@@ -10,8 +10,8 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3.
 
-This program is distributed  WITHOUT ANY WARRANTY and without even the 
-implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+This program is distributed  WITHOUT ANY WARRANTY and without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
@@ -46,11 +46,11 @@ function varargout = LaunchManager(varargin)
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
 gui_State = struct('gui_Name',       mfilename, ...
-                   'gui_Singleton',  gui_Singleton, ...
-                   'gui_OpeningFcn', @LaunchManager_OpeningFcn, ...
-                   'gui_OutputFcn',  @LaunchManager_OutputFcn, ...
-                   'gui_LayoutFcn',  [] , ...
-                   'gui_Callback',   []);
+    'gui_Singleton',  gui_Singleton, ...
+    'gui_OpeningFcn', @LaunchManager_OpeningFcn, ...
+    'gui_OutputFcn',  @LaunchManager_OutputFcn, ...
+    'gui_LayoutFcn',  [] , ...
+    'gui_Callback',   []);
 if nargin && ischar(varargin{1})
     gui_State.gui_Callback = str2func(varargin{1});
 end
@@ -91,12 +91,8 @@ set(handles.pushbutton7, 'CData', ImportButtonGFX);
 % Check to see if a folder for this protocol's name exists, and if not, make one
 % along with default files for the default test subject named "Test Session"
 
-DataPath = fullfile(BpodSystem.BpodPath,'Data',DummySubjectString);
-ProtocolName = BpodSystem.CurrentProtocolName;
-ProtocolPath = fullfile(BpodSystem.BpodPath,'Protocols',ProtocolName);
-SettingsPath = fullfile(DataPath,ProtocolName,'Session Settings');
-DefaultSettingsPath = fullfile(ProtocolPath,'SessionSettings.mat');
-
+DataPath = fullfile(BpodSystem.Path.DataFolder,DummySubjectString);
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
 
 %Make standard folders for this protocol.  This will fail silently if the folders exist
 mkdir(DataPath, ProtocolName);
@@ -113,8 +109,7 @@ end
 % Make a list of the names of all subjects who already have a folder for this
 % protocol.
 
-DataPath = fullfile(BpodSystem.BpodPath,'Data');
-CandidateSubjects = dir(DataPath);
+CandidateSubjects = dir(BpodSystem.Path.DataFolder);
 SubjectNames = cell(1);
 nSubjects = 1;
 SubjectNames{1} = DummySubjectString;
@@ -122,7 +117,7 @@ for x = 1:length(CandidateSubjects)
     if x > 2
         if CandidateSubjects(x).isdir
             if ~strcmp(CandidateSubjects(x).name, DummySubjectString)
-                Testpath = fullfile(DataPath,CandidateSubjects(x).name,ProtocolName);
+                Testpath = fullfile(BpodSystem.Path.DataFolder,CandidateSubjects(x).name,ProtocolName);
                 if exist(Testpath) == 7
                     nSubjects = nSubjects + 1;
                     SubjectNames{nSubjects} = CandidateSubjects(x).name;
@@ -133,7 +128,7 @@ for x = 1:length(CandidateSubjects)
 end
 set(handles.listbox1,'String',SubjectNames);
 
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',DummySubjectString, ProtocolName,'Session Settings');
+SettingsPath = fullfile(DataPath, ProtocolName,'Session Settings');
 Candidates = dir(SettingsPath);
 nSettingsFiles = 0;
 SettingsFileNames = cell(1);
@@ -161,7 +156,7 @@ guidata(hObject, handles);
 
 
 % --- Outputs from this function are returned to the command line.
-function varargout = LaunchManager_OutputFcn(hObject, eventdata, handles) 
+function varargout = LaunchManager_OutputFcn(hObject, eventdata, handles)
 % varargout  cell array for returning output args (see VARARGOUT);
 % hObject    handle to figure
 % eventdata  reserved - to be defined in a future version of MATLAB
@@ -203,15 +198,15 @@ function listbox1_Callback(hObject, eventdata, handles)
 % Hints: contents = cellstr(get(hObject,'String')) returns listbox1 contents as cell array
 %        contents{get(hObject,'Value')} returns selected item from listbox1
 global BpodSystem
-ProtocolName = BpodSystem.CurrentProtocolName;
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
 NameList = get(handles.listbox1, 'String');
 Selected = get(handles.listbox1, 'Value');
-    if iscell(NameList)
-        SelectedName = NameList{Selected};
-    else
-        SelectedName = NameList;
-    end
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SelectedName,ProtocolName,'Session Settings');
+if iscell(NameList)
+    SelectedName = NameList{Selected};
+else
+    SelectedName = NameList;
+end
+SettingsPath = fullfile(BpodSystem.Path.DataFolder,SelectedName,ProtocolName,'Session Settings');
 Candidates = dir(SettingsPath);
 nSettingsFiles = 0;
 SettingsFileNames = cell(1);
@@ -266,9 +261,9 @@ Selected = get(handles.listbox2, 'Value');
 if ~isempty(NameList)
     SettingsFileName = NameList{Selected};
     if ~isempty(SettingsFileName) && ~isempty(NameList)
-        ProtocolName = BpodSystem.CurrentProtocolName;
+        ProtocolName = BpodSystem.Status.CurrentProtocolName;
         FormattedDate = [datestr(now, 3) datestr(now, 7) '_' datestr(now, 10)];
-        DataFolder = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName, 'Session Data');
+        DataFolder = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName, 'Session Data');
         Candidates = dir(DataFolder);
         nSessionsToday = 0;
         for x = 1:length(Candidates)
@@ -278,33 +273,45 @@ if ~isempty(NameList)
                 end
             end
         end
-        DataPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName,'Session Data',[SubjectName '_' ProtocolName '_' FormattedDate '_Session' num2str(nSessionsToday+1) '.mat']);
-        SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName, 'Session Settings',[SettingsFileName '.mat']);
-        BpodSystem.DataPath = DataPath;
-        BpodSystem.SettingsPath = SettingsPath;
-        ProtocolPath = fullfile(BpodSystem.ProtocolRoot,ProtocolName,[ProtocolName '.m']);
+        DataFolder = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName,'Session Data');
+        if ~exist(DataFolder)
+            mkdir(DataFolder);
+        end
+        BpodSystem.Path.CurrentDataFile = fullfile(DataFolder,[SubjectName '_' ProtocolName '_' FormattedDate '_Session' num2str(nSessionsToday+1) '.mat']);
+        SettingsFolder = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName, 'Session Settings');
+        if ~exist(SettingsFolder)
+            mkdir(SettingsFolder);
+        end
+        DefaultSettingsPath = fullfile(SettingsFolder,'DefaultSettings.mat');
+        % Ensure that a default settings file exists
+        if ~exist(DefaultSettingsPath)
+            ProtocolSettings = struct;
+            save(DefaultSettingsPath, 'ProtocolSettings')
+        end
+        BpodSystem.Path.Settings = fullfile(SettingsFolder,[SettingsFileName '.mat']);
+        ProtocolPath = fullfile(BpodSystem.Path.ProtocolFolder,ProtocolName,[ProtocolName '.m']);
         close(LaunchManager)
-        BpodSystem.Live = 1;
+        BpodSystem.Status.Live = 1;
         BpodSystem.GUIData.ProtocolName = ProtocolName;
         BpodSystem.GUIData.SubjectName = SubjectName;
         BpodSystem.GUIData.SettingsFileName = SettingsFileName;
-        SettingStruct = load(SettingsPath);
+        SettingStruct = load(BpodSystem.Path.Settings);
         F = fieldnames(SettingStruct);
         FieldName = F{1};
         BpodSystem.ProtocolSettings = eval(['SettingStruct.' FieldName]);
         BpodSystem.Data = struct;
         addpath(ProtocolPath);
-        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.Graphics.PauseButton, 'TooltipString', 'Press to pause session');
-        BpodSystem.BeingUsed = 1;
-        BpodSystem.ProtocolStartTime = BpodTime;
+        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.PauseButton, 'TooltipString', 'Press to pause session');
+        BpodSystem.Status.BeingUsed = 1;
+        BpodSystem.ProtocolStartTime = now*100000;
         run(ProtocolPath);
     else
         BpodErrorSound;
         msgbox('Error: You must choose a valid settings file to proceed.', 'Modal')
     end
 else
-        BpodErrorSound;
-        msgbox('Error: You must create a valid settings file to proceed.', 'Modal')
+    BpodErrorSound;
+    msgbox('Error: You must create a valid settings file to proceed.', 'Modal')
 end
 % --- Executes on button press in pushbutton2.
 function pushbutton2_Callback(hObject, eventdata, handles)  % --------------------------------Add new subject
@@ -328,40 +335,41 @@ if ~iscell(NameList)
 end
 %try
 NewName = get(NewAnimalName, 'String');
-NewName = Spaces2Underscores(NewName);
-% Check to see if subject already exists
-ProtocolName = BpodSystem.CurrentProtocolName;
-Testpath = fullfile(BpodSystem.BpodPath,'Data',NewName);
-Testpath2 = fullfile(Testpath,ProtocolName);
-ProtocolPath = fullfile(BpodSystem.BpodPath,'Protocols',ProtocolName);
-NewAnimal = 0;
-if exist(Testpath) ~= 7
-    mkdir(Testpath);
-    NewAnimal = 1;
-end
-if exist(Testpath2) ~= 7
-    NameList{length(NameList)+1} = NewName;
-    set(handles.listbox1, 'String', NameList);
-    mkdir( fullfile(Testpath,ProtocolName));
-    mkdir( fullfile(Testpath,ProtocolName,'Session Data'))
-    mkdir( fullfile(Testpath,ProtocolName,'Session Settings'))
-    SettingsPath = fullfile(Testpath,ProtocolName,'Session Settings');
-    DefaultSettingsPath = fullfile(SettingsPath,'DefaultSettings.mat');
-    % Ensure that a default settings file exists
-    ProtocolSettings = struct;
-    save(DefaultSettingsPath, 'ProtocolSettings')
-    close(NameInputFig);
-    if NewAnimal == 0
-        msgbox(['Existing test subject ' NewName ' has now been registered for ' ProtocolName '.'], 'Modal')
+if ~isempty(NewName)
+    NewName = Spaces2Underscores(NewName);
+    % Check to see if subject already exists
+    ProtocolName = BpodSystem.Status.CurrentProtocolName;
+    Testpath = fullfile(BpodSystem.Path.DataFolder,NewName);
+    Testpath2 = fullfile(Testpath,ProtocolName);
+    ProtocolPath = fullfile(BpodSystem.Path.BpodRoot,'Protocols',ProtocolName);
+    NewAnimal = 0;
+    if exist(Testpath) ~= 7
+        mkdir(Testpath);
+        NewAnimal = 1;
     end
-else
-    close(NameInputFig);
-    BpodErrorSound;
-    msgbox('Subject already exists in this task. No entry made.', 'Modal')
+    if exist(Testpath2) ~= 7
+        NameList{length(NameList)+1} = NewName;
+        set(handles.listbox1, 'String', NameList);
+        mkdir( fullfile(Testpath,ProtocolName));
+        mkdir( fullfile(Testpath,ProtocolName,'Session Data'))
+        mkdir( fullfile(Testpath,ProtocolName,'Session Settings'))
+        SettingsPath = fullfile(Testpath,ProtocolName,'Session Settings');
+        DefaultSettingsPath = fullfile(SettingsPath,'DefaultSettings.mat');
+        % Ensure that a default settings file exists
+        ProtocolSettings = struct;
+        save(DefaultSettingsPath, 'ProtocolSettings')
+        close(NameInputFig);
+        if NewAnimal == 0
+            msgbox(['Existing test subject ' NewName ' has now been registered for ' ProtocolName '.'], 'Modal')
+        end
+    else
+        close(NameInputFig);
+        BpodErrorSound;
+        msgbox('Subject already exists in this task. No entry made.', 'Modal')
+    end
+    %catch
+    %end
 end
-%catch
-%end
-
 % Choose default command line output for LaunchManager
 handles.output = hObject;
 
@@ -375,7 +383,7 @@ function pushbutton3_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 global BpodSystem;
-% Add Subject
+% Delete Subject
 NameList = get(handles.listbox1, 'String');
 Selected = get(handles.listbox1, 'Value');
 if Selected > 1
@@ -393,30 +401,30 @@ if Selected > 1
     waitfor(ZapButton, 'Value')
     OkToDelete = 0;
     try
-    OkToDelete = sum(get(BackupCheck, 'Value') + get(IntentCheck, 'Value') == 2);
+        OkToDelete = sum(get(BackupCheck, 'Value') + get(IntentCheck, 'Value') == 2);
     catch
     end
     if ((OkToDelete == 1) && (~isempty(SelectedName)))
-        DeletePath = fullfile(BpodSystem.BpodPath,'Data',SelectedName);
-         rmdir(DeletePath,'s')
+        DeletePath = fullfile(BpodSystem.Path.DataFolder,SelectedName);
+        rmdir(DeletePath,'s')
         BpodErrorSound;
-         msgbox(['       Entry  for ' SelectedName ' deleted!'], 'Modal');
-        close(DeleteFig);  
+        msgbox(['       Entry  for ' SelectedName ' deleted!'], 'Modal');
+        close(DeleteFig);
         Pos = find(strcmp(SelectedName, NameList));
         NameList = NameList([1:Pos-1 Pos+1:length(NameList)]);
-        set(handles.listbox1, 'String', NameList);   
-        set(handles.listbox1, 'Value', 1); 
+        set(handles.listbox1, 'String', NameList);
+        set(handles.listbox1, 'Value', 1);
     else
         BpodErrorSound;
         msgbox('           Entry NOT deleted.', 'Modal');
         try
-        close(DeleteFig);
+            close(DeleteFig);
         catch
         end
     end
 else
-     msgbox('The dummy subject cannot be deleted.');
-     BpodErrorSound;
+    msgbox('The dummy subject cannot be deleted.');
+    BpodErrorSound;
 end
 
 % Choose default command line output for LaunchManager
@@ -458,8 +466,8 @@ if ~iscell(SubjectNameList)
 end
 SubjectName = SubjectNameList{SubjectNameValue};
 % Check to see if subject already exists
-ProtocolName = BpodSystem.CurrentProtocolName;
-Testpath = 			fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName,'Session Settings',[NewSettingsName '.mat' ]);
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
+Testpath = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName,'Session Settings',[NewSettingsName '.mat' ]);
 if exist(Testpath) == 0
     SettingsPath = Testpath;
     ProtocolSettings = struct;
@@ -468,7 +476,7 @@ if exist(Testpath) == 0
     set(handles.listbox2, 'String', SettingsNameList);
     set(handles.listbox2, 'Value', length(SettingsNameList));
     close(NameInputFig);
-    BpodSystem.SettingsPath = SettingsPath;
+    BpodSystem.Path.Settings = SettingsPath;
     % Choose default command line output for LaunchManager
     handles.output = hObject;
     % Update handles structure
@@ -501,14 +509,14 @@ if ~iscell(NameList)
 end
 Selected = get(handles.listbox2, 'Value');
 SettingsFileName = NameList{Selected};
-ProtocolName = BpodSystem.CurrentProtocolName;
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName,'Session Settings',[ SettingsFileName '.mat']);
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
+SettingsPath = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName,'Session Settings',[ SettingsFileName '.mat']);
 delete(SettingsPath);
 BpodErrorSound;
 msgbox(['Settings file ' SettingsFileName ' deleted!'], 'Modal');
 set(handles.listbox2, 'Value', 1);
 % Update UI with new settings
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName, ProtocolName,'Session Settings');
+SettingsPath = fullfile(BpodSystem.Path.DataFolder,SubjectName, ProtocolName,'Session Settings');
 Candidates = dir(SettingsPath);
 nSettingsFiles = 0;
 SettingsFileNames = cell(1);
@@ -548,9 +556,9 @@ if ~iscell(NameList)
 end
 Selected = get(handles.listbox2, 'Value');
 SettingsFileName = NameList{Selected};
-ProtocolName = BpodSystem.CurrentProtocolName;
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName,'Session Settings',[ SettingsFileName '.mat']);
-BpodSystem.SettingsPath = SettingsPath;
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
+SettingsPath = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName,'Session Settings',[ SettingsFileName '.mat']);
+BpodSystem.Path.Settings = SettingsPath;
 evalin('base', ['load(''' SettingsPath ''')'])
 clc
 disp(' ')
@@ -567,7 +575,7 @@ function pushbutton7_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 global BpodSystem;
-SearchStartPath = fullfile(BpodSystem.BpodPath, 'Data');
+SearchStartPath = BpodSystem.Path.DataFolder;
 [Filename Pathname Junk] = uigetfile('*.mat', 'Select settings to import', SearchStartPath);
 SettingsName = Filename(1:(length(Filename)-4));
 TargetSettingsPath = [Pathname Filename];
@@ -581,8 +589,8 @@ if ~iscell(NameList)
 end
 Selected = get(handles.listbox1, 'Value');
 SubjectName = NameList{Selected};
-ProtocolName = BpodSystem.CurrentProtocolName;
-DestinationSettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName,ProtocolName,'Session Settings',[ SettingsName '.mat']);
+ProtocolName = BpodSystem.Status.CurrentProtocolName;
+DestinationSettingsPath = fullfile(BpodSystem.Path.DataFolder,SubjectName,ProtocolName,'Session Settings',[ SettingsName '.mat']);
 
 if (exist(DestinationSettingsPath) == 2)
     msgbox(['"' SettingsName '"' ' already exists in the target folder. Import aborted.'])
@@ -593,7 +601,7 @@ end
 copyfile(TargetSettingsPath, DestinationSettingsPath);
 
 % Update UI with new settings
-SettingsPath = fullfile(BpodSystem.BpodPath,'Data',SubjectName, ProtocolName,'Session Settings');
+SettingsPath = fullfile(BpodSystem.Path.DataFolder,SubjectName, ProtocolName,'Session Settings');
 Candidates = dir(SettingsPath);
 nSettingsFiles = 0;
 SettingsFileNames = cell(1);
@@ -615,3 +623,8 @@ handles.output = hObject;
 
 % Update handles structure
 guidata(hObject, handles);
+
+function OutputString = Spaces2Underscores(InputString)
+SpaceIndexes = InputString == ' ';
+InputString(SpaceIndexes) = '_';
+OutputString = InputString;

@@ -1,8 +1,8 @@
 %{
 ----------------------------------------------------------------------------
 
-This file is part of the Bpod Project
-Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
+This file is part of the Sanworks Bpod repository
+Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -10,148 +10,125 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3.
 
-This program is distributed  WITHOUT ANY WARRANTY and without even the 
-implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+This program is distributed  WITHOUT ANY WARRANTY and without even the
+implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
-function ManualOverride(TargetCode, ChannelCode)
+function ManualOverride(TargetCode, ChannelCode, varargin)
 global BpodSystem
-
-%% Determine the new state of the system
-switch TargetCode
-    case 1
-        if BpodSystem.HardwareState.Valves(ChannelCode) == 0
-            BpodSystem.HardwareState.Valves(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.Valves(ChannelCode) = 0;
-        end
-    case 2
-        if BpodSystem.HardwareState.PWMLines(ChannelCode) == 0
-            BpodSystem.HardwareState.PWMLines(ChannelCode) = 255;
-        else
-            BpodSystem.HardwareState.PWMLines(ChannelCode) = 0;
-        end
-    case 3
-        if BpodSystem.HardwareState.PortSensors(ChannelCode) == 0
-            BpodSystem.HardwareState.PortSensors(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.PortSensors(ChannelCode) = 0;
-        end
-    case 4
-        if BpodSystem.HardwareState.BNCInputs(ChannelCode) == 0
-            BpodSystem.HardwareState.BNCInputs(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.BNCInputs(ChannelCode) = 0;
-        end
-    case 5
-        if BpodSystem.HardwareState.BNCOutputs(ChannelCode) == 0
-            BpodSystem.HardwareState.BNCOutputs(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.BNCOutputs(ChannelCode) = 0;
-        end
-    case 6
-        if BpodSystem.HardwareState.WireInputs(ChannelCode) == 0
-            BpodSystem.HardwareState.WireInputs(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.WireInputs(ChannelCode) = 0;
-        end
-    case 7
-        if BpodSystem.HardwareState.WireOutputs(ChannelCode) == 0
-            BpodSystem.HardwareState.WireOutputs(ChannelCode) = 1;
-        else
-            BpodSystem.HardwareState.WireOutputs(ChannelCode) = 0;
-        end
+if nargin > 2
+    ByteCode = varargin{1};
 end
 
-%% Determine override message prefix (V for virtual event, O for hardware override, S for soft event)
-% Also append output type byte (V for valves, P for PWM, B for BNC, W for Wire
-switch TargetCode
-    case 1
-        Databyte = bin2dec(num2str(BpodSystem.HardwareState.Valves(8:-1:1)));
-        OverrideMessage = ['OV' Databyte];
-    case 2
-        DataString = uint8(BpodSystem.HardwareState.PWMLines);
-        OverrideMessage = ['OP' DataString];
-    case 3
-        OverrideMessage = ['VP' ChannelCode-1];
-    case 4
-        OverrideMessage = ['VB' ChannelCode-1];
-    case 5
-        Databyte = bin2dec(num2str(BpodSystem.HardwareState.BNCOutputs(2:-1:1)));
-        OverrideMessage = ['OB' Databyte];
-    case 6
-        OverrideMessage = ['VW' ChannelCode-1];
-    case 7
-        Databyte = bin2dec(num2str(BpodSystem.HardwareState.WireOutputs(4:-1:1)));
-        OverrideMessage = ['OW' Databyte];
-    case 8
-        Databyte = str2double(get(BpodSystem.GUIHandles.SoftCodeSelector, 'String'));
-        if Databyte >= 0
-            Databyte = uint8(Databyte);
-        else
-            error('The soft code must be a byte in the range 0-255');
+switch TargetCode(1)
+    case 'I' % Input channel
+        Ch = ResolveInputChannel(TargetCode(2), ChannelCode);
+        BpodSystem.HardwareState.InputState(Ch) = 1-BpodSystem.HardwareState.InputState(Ch);
+        OverrideMessage = ['V' Ch-1 BpodSystem.HardwareState.InputState(Ch)];
+    case 'O' % Output channel
+        Ch = ResolveOutputChannel(TargetCode(2), ChannelCode);
+        DigitalOutputChannel = Ch-1;
+        switch TargetCode(2)
+            case 'S' % Assume SPI valve shift register
+                if BpodSystem.HardwareState.OutputState(Ch) == 0
+                    OverrideMessage = ['O' DigitalOutputChannel 2^(ByteCode-1)];
+                    BpodSystem.HardwareState.OutputState(Ch) = 2^(ByteCode-1);
+                else
+                    OverrideMessage = ['O' DigitalOutputChannel 0];
+                    BpodSystem.HardwareState.OutputState(Ch) = 0;
+                end
+                % If one valve is open, disable all others
+                Channels = 1:8;
+                ChPos = ByteCode;
+                InactiveChannels = Channels(Channels ~= ChPos);
+                for x = 1:7
+                    if (ByteCode > 0) && BpodSystem.HardwareState.OutputState(Ch) > 0
+                        set(BpodSystem.GUIHandles.PortValveButton(InactiveChannels(x)), 'Enable', 'off');
+                    else
+                        set(BpodSystem.GUIHandles.PortValveButton(InactiveChannels(x)), 'Enable', 'on');
+                    end
+                end
+            case 'P'
+                oldVal = BpodSystem.HardwareState.OutputState(Ch);
+                if oldVal < 255
+                    BpodSystem.HardwareState.OutputState(Ch) = 255;
+                else
+                    BpodSystem.HardwareState.OutputState(Ch) = 0;
+                end
+                OverrideMessage = ['O' DigitalOutputChannel BpodSystem.HardwareState.OutputState(Ch)];
+            case 'B'
+                BpodSystem.HardwareState.OutputState(Ch) = 1-BpodSystem.HardwareState.OutputState(Ch);
+                OverrideMessage = ['O' DigitalOutputChannel BpodSystem.HardwareState.OutputState(Ch)];
+            case 'W'
+                BpodSystem.HardwareState.OutputState(Ch) = 1-BpodSystem.HardwareState.OutputState(Ch);
+                OverrideMessage = ['O' DigitalOutputChannel BpodSystem.HardwareState.OutputState(Ch)];
+            case 'U'
+                switch Ch
+                    case 1
+                        Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector1, 'String');
+                        
+                        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton1;
+                    case 2
+                        Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector2, 'String');
+                        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton2;
+                    case 3
+                        Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector3, 'String');
+                        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton3;
+                end
+                if sum(Databyte > 57) ~= length(Databyte)
+                    Databyte = str2double(Databyte);
+                elseif length(Databyte) > 1
+                    error('The serial message must be a single byte in the range 0-255');
+                end
+                if Databyte >= 0
+                    Databyte = uint8(Databyte);
+                elseif ischar(Databyte) && length(DataByte) == 1
+                    Databyte = uint8(Databyte);
+                else
+                    error('The serial message must be a byte in the range 0-255');
+                end
+                BpodSystem.HardwareState.OutputState(Ch) = Databyte;
+                OverrideMessage = ['U' Ch BpodSystem.HardwareState.OutputState(Ch)];
+            case 'X' % USB
+                Databyte = str2double(get(BpodSystem.GUIHandles.SoftCodeSelector, 'String'));
+                ButtonHandle = BpodSystem.GUIHandles.SoftTriggerButton;
+                if Databyte >= 0
+                    Databyte = uint8(Databyte);
+                else
+                    error('The soft code must be a byte in the range 0-255');
+                end
+                OverrideMessage = ['S' Databyte]; % Echo soft code
         end
-        OverrideMessage = ['VS' Databyte];
-        ButtonHandle = BpodSystem.GUIHandles.SoftTriggerButton;
-    case 9
-        Databyte = str2double(get(BpodSystem.GUIHandles.HWSerialCodeSelector1, 'String'));
-        if Databyte >= 0
-            Databyte = uint8(Databyte);
-        else
-            error('The serial message must be a byte in the range 0-255');
-        end
-        OverrideMessage = ['H' 1 Databyte];
-        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton1;
-    case 10
-        Databyte = str2double(get(BpodSystem.GUIHandles.HWSerialCodeSelector2, 'String'));
-        if Databyte >= 0
-            Databyte = uint8(Databyte);
-        else
-            error('The serial message must be a byte in the range 0-255');
-        end
-        OverrideMessage = ['H' 2 Databyte];
-        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton2;
-    case 11
-        Databyte = str2double(get(BpodSystem.GUIHandles.HWSerialCodeSelector3, 'String'));
-        if Databyte >= 0
-            Databyte = uint8(Databyte);
-        else
-            error('The serial message must be a byte in the range 0-255');
-        end
-        OverrideMessage = ['H' 3 Databyte];
-        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton3;
 end
 
 %% Send message to Bpod
 if BpodSystem.EmulatorMode == 0
-    BpodSerialWrite(OverrideMessage, 'uint8');
+    BpodSystem.SerialPort.write(OverrideMessage, 'uint8');
 else
     BpodSystem.VirtualManualOverrideBytes = OverrideMessage;
     BpodSystem.ManualOverrideFlag = 1;
 end
 
-%% If one water valve is open, disable all others
-if TargetCode == 1
-    Channels = 1:8;
-    InactiveChannels = Channels(Channels ~= ChannelCode);
-    for x = 1:7
-        if BpodSystem.HardwareState.Valves(ChannelCode) == 1
-            set(BpodSystem.GUIHandles.PortValveButton(InactiveChannels(x)), 'Enable', 'off');
-        else
-            set(BpodSystem.GUIHandles.PortValveButton(InactiveChannels(x)), 'Enable', 'on');
-        end
-    end
-end
 
 %% If sending a soft byte code, flash the button to indicate success
-if (TargetCode > 7) && (TargetCode < 12)
-    set(ButtonHandle, 'CData', BpodSystem.Graphics.SoftTriggerActiveButton)
+if (TargetCode(2) == 'U') || (TargetCode(2) == 'X')
+    set(ButtonHandle, 'CData', BpodSystem.GUIData.SoftTriggerActiveButton)
     drawnow;
     pause(.2);
-    set(ButtonHandle, 'CData', BpodSystem.Graphics.SoftTriggerButton)
+    set(ButtonHandle, 'CData', BpodSystem.GUIData.SoftTriggerButton)
 end
-UpdateBpodCommanderGUI;
+BpodSystem.RefreshGUI;
 drawnow;
+
+function Ch = ResolveOutputChannel(ChType, ChNum)
+global BpodSystem
+Channels = find(BpodSystem.HardwareState.OutputType==ChType);
+Ch = Channels(ChNum);
+
+function Ch = ResolveInputChannel(ChType, ChNum)
+global BpodSystem
+Channels = find(BpodSystem.HW.Inputs==ChType);
+Ch = Channels(ChNum);

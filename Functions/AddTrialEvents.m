@@ -24,6 +24,21 @@ if isfield(TE, 'RawEvents')
     TrialNum = length(TE.RawEvents.Trial) + 1;
 else
     TrialNum = 1;
+    TE.Info = struct;
+    switch BpodSystem.FirmwareBuild
+        case 5
+            TE.Info.BpodVersion = 0.5;
+        case 6
+            TE.Info.BpodVersion = 0.5;
+        case 7
+            TE.Info.BpodVersion = 0.7;
+        case 8
+            TE.Info.BpodVersion = 0.7;
+    end
+    TE.Info.SessionDate = datestr(now, 1);
+    TheTime = now;
+    TE.Info.SessionStartTime_UTC = datestr(TheTime, 13);
+    TE.Info.SessionStartTime_MATLAB = TheTime;
 end
 TE.nTrials = TrialNum;
 %% Parse and add raw events for this trial
@@ -64,7 +79,7 @@ end
 Events = RawTrialEvents.Events;
 for x = 1:length(Events)
     %eval(['TE.RawEvents.Trial{' num2str(TrialNum) '}.Events.' BpodSystem.EventNames{Events(x)} ' = [' num2str(RawTrialEvents.EventTimestamps(Events == Events(x))) '];'])
-    TE.RawEvents.Trial{TrialNum}.Events.(BpodSystem.EventNames{Events(x)}) = RawTrialEvents.EventTimestamps(Events == Events(x));
+    TE.RawEvents.Trial{TrialNum}.Events.(BpodSystem.StateMachineInfo.EventNames{Events(x)}) = RawTrialEvents.EventTimestamps(Events == Events(x));
 end
 TE.RawData.OriginalStateNamesByNumber{TrialNum} = BpodSystem.StateMatrix.StateNames;
 TE.RawData.OriginalStateData{TrialNum} = RawTrialEvents.States;
@@ -72,5 +87,5 @@ TE.RawData.OriginalEventData{TrialNum} = RawTrialEvents.Events;
 TE.RawData.OriginalStateTimestamps{TrialNum} = RawTrialEvents.StateTimestamps;
 TE.RawData.OriginalEventTimestamps{TrialNum} = RawTrialEvents.EventTimestamps;
 TE.TrialStartTimestamp(TrialNum) = RawTrialEvents.TrialStartTimestamp;
-TE.Settings = BpodSystem.ProtocolSettings;
+TE.SettingsFile = BpodSystem.ProtocolSettings;
 newTE = TE;

@@ -16,21 +16,7 @@ switch op
         BpodSystem.BonsaiSocket.output_stream = BpodSystem.BonsaiSocket.Socket.getOutputStream;
         BpodSystem.BonsaiSocket.d_output_stream = DataOutputStream(BpodSystem.BonsaiSocket.output_stream);
         BpodSystem.BonsaiSocket.input_stream = BpodSystem.BonsaiSocket.Socket.getInputStream;
-        BpodSystem.BonsaiSocket.input_streamreader = BufferedReader(InputStreamReader(BpodSystem.BonsaiSocket.Socket.getInputStream));
-        %         catch
-        %             if isfield(BpodSystem.BonsaiSocket, 'server_socket')
-        %                 if ~isempty(BpodSystem.BonsaiSocket.server_socket)
-        %                     BpodSystem.BonsaiSocket.server_socket.close;
-        %                 end
-        %             end
-        %             if isfield(BpodSystem.BonsaiSocket, 'output_socket')
-        %                 if ~isempty(BpodSystem.BonsaiSocket.output_socket)
-        %                     BpodSystem.BonsaiSocket.output_socket.close;
-        %                 end
-        %             end
-        %             disp('TCP socket connection error.')
-        %         end
-        
+        BpodSystem.BonsaiSocket.input_streamreader = BufferedReader(InputStreamReader(BpodSystem.BonsaiSocket.Socket.getInputStream)); 
     case 'read'
         nBytes = varargin{1};
         Message = uint8(zeros(1,nBytes));

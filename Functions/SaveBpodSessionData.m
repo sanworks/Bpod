@@ -20,4 +20,4 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 function SaveBpodSessionData
 global BpodSystem
 SessionData = BpodSystem.Data;
-save(BpodSystem.DataPath, 'SessionData', '-v6');
+save(BpodSystem.Path.CurrentDataFile, 'SessionData', '-v6');

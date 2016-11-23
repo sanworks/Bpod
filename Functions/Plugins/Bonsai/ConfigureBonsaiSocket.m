@@ -24,7 +24,6 @@ function SetBonsaiAutoConnect(junk, otherjunk)
 global BpodSystem
 BonsaiAutoConnectStatus = get(BpodSystem.GUIHandles.BonsaiAutoConnectSelector, 'value');
 BpodSystem.SystemSettings.BonsaiAutoConnect = BonsaiAutoConnectStatus;
-SaveBpodSystemSettings;
 
 function ConnectToBonsai(junk, otherjunk)
 global BpodSystem

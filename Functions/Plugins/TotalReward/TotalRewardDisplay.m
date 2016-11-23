@@ -31,8 +31,7 @@ Op = lower(Op);
 switch Op
     case 'init'
         BpodSystem.PluginObjects.TotalRewardDelivered = 0;
-        BpodSystem.ProtocolFigures.TotalRewardDisplay = figure('Position', [100 250 200 150],'name','Total Reward','numbertitle','off', 'MenuBar', 'none', 'Resize', 'off', 'Color', [.6 .6 1]);
-        set(BpodSystem.ProtocolFigures.TotalRewardDisplay, 'Position', [100 250 150 150]);
+        BpodSystem.ProtocolFigures.TotalRewardDisplay = figure('Position', [900 550 150 150],'name','Total Reward','numbertitle','off', 'MenuBar', 'none', 'Resize', 'off', 'Color', [.6 .6 1]);
         BpodSystem.GUIHandles.TotalRewardDisplay = struct;
         BpodSystem.GUIHandles.TotalRewardDisplay.Label = uicontrol('Style', 'text', 'String', 'Total reward', 'units', 'normalized', 'Position', [.15 .7 .7 .15], 'FontWeight', 'bold', 'FontSize', 16, 'FontName', 'Arial', 'BackgroundColor', [.7 .7 1]);
         BpodSystem.GUIHandles.TotalRewardDisplay.Amount = uicontrol('Style', 'text', 'String', ['0 ' char(181) 'l'], 'units', 'normalized', 'Position', [.1 .25 .8 .25], 'FontSize', 24, 'FontName', 'Arial', 'BackgroundColor', [.7 .7 1]);

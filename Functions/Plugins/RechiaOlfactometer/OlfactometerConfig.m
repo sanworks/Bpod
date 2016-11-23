@@ -51,12 +51,12 @@ function OlfactometerConfig_OpeningFcn(hObject, eventdata, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to OlfactometerConfig (see VARARGIN)
+global BpodSystem
 ha = axes('units','normalized', 'position',[0 0 1 1]);
 uistack(ha,'bottom');
 BG = imread('OlfControlPanel.bmp');
 image(BG); axis off;
-loadBpodPath;
-if exist(fullfile(BpodPath,'Bpod System Files','OlfConfig.mat'))
+if exist(fullfile(BpodSystem.Path.BpodRoot,'Bpod System Files','OlfConfig.mat'))
     load OlfConfig
 else
     load OlfConfig_Template
@@ -127,8 +127,7 @@ catch
         Temp = '';
         FormattedIP = uint8(FormattedIP);
         OlfConfig.OlfServerIP = FormattedIP;
-        loadBpodPath
-        SavePath = fullfile(BpodPath,'Bpod System Files','OlfConfig.mat');
+        SavePath = fullfile(BpodSystem.Path.BpodRoot,'Bpod System Files','OlfConfig.mat');
         save(SavePath, 'OlfConfig');
         Mbox = msgbox('       New IP address found and saved', 'Modal');
         pause(1);
@@ -199,6 +198,7 @@ function edit1_Callback(hObject, eventdata, handles)
 
 % Hints: get(hObject,'String') returns contents of edit1 as text
 %        str2double(get(hObject,'String')) returns contents of edit1 as a double
+global BpodSystem
 load OlfConfig
 IPString = get(handles.edit1, 'String');
 BinString = IPString ~= '.';
@@ -219,8 +219,7 @@ FormattedIP(nSections) = str2double(Temp);
 Temp = '';
 FormattedIP = uint8(FormattedIP);
 OlfConfig.OlfServerIP = FormattedIP;
-loadBpodPath
-SavePath = fullfile(BpodPath,'Bpod System Files','OlfConfig.mat');
+SavePath = fullfile(BpodSystem.Path.BpodRoot,'Bpod System Files','OlfConfig.mat');
 save(SavePath, 'OlfConfig');
 msgbox('  Olfactometer IP saved. Attempting connection...', 'Modal')
 BpodErrorSound;
@@ -601,6 +600,7 @@ function uipanel1_SelectionChangeFcn(hObject, eventdata, handles)
 %	OldValue: handle of the previously selected object or empty if none was selected
 %	NewValue: handle of the currently selected object
 % handles    structure with handles and user data (see GUIDATA)
+global BpodSystem
 Offset = 0;
 if get(handles.radiobutton1, 'Value') == 1
     Offset = 0;
@@ -613,8 +613,7 @@ elseif get(handles.radiobutton4, 'Value') == 1
 end
 load OlfConfig
 OlfConfig.BankPairOffset = Offset;
-loadBpodPath
-SavePath = fullfile(BpodPath,'Bpod System Files','OlfConfig.mat');
+SavePath = fullfile(BpodSystem.Path.BpodRoot,'Bpod System Files','OlfConfig.mat');
 save(SavePath, 'OlfConfig');
 Mbox = msgbox('            Selection saved.', 'Modal');
 BpodErrorSound;

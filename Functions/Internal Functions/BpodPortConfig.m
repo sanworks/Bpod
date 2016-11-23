@@ -1,8 +1,8 @@
 %{
 ----------------------------------------------------------------------------
 
-This file is part of the Bpod Project
-Copyright (C) 2014 Joshua I. Sanders, Cold Spring Harbor Laboratory, NY, USA
+This file is part of the Sanworks Bpod repository
+Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -56,32 +56,44 @@ else
     end
 end
 % Populate checkboxes
-for x = 1:8
-    if BpodSystem.InputsEnabled.PortsEnabled(x) == 1
-        eval(['set(BpodSystem.GUIHandles.PortConfigPort' num2str(x) ', ''Value'', 1);'])
+PortChannels = find(BpodSystem.HW.Inputs == 'P');
+for x = PortChannels
+    if BpodSystem.InputsEnabled(x) == 1
+        eval(['set(BpodSystem.GUIHandles.PortConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Port+1) ', ''Value'', 1);'])
     else
-        eval(['set(BpodSystem.GUIHandles.PortConfigPort' num2str(x) ', ''Value'', 0);'])
+        eval(['set(BpodSystem.GUIHandles.PortConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Port+1) ', ''Value'', 0);'])
     end
 end
 if BpodSystem.FirmwareBuild < 8
-    for x = 1:4
-        if BpodSystem.InputsEnabled.WiresEnabled(x) == 1
-            eval(['set(BpodSystem.GUIHandles.WireConfigPort' num2str(x) ', ''Value'', 1);'])
+    WireChannels = find(BpodSystem.HW.Inputs == 'W');
+    for x = WireChannels
+        if BpodSystem.InputsEnabled(x) == 1
+            eval(['set(BpodSystem.GUIHandles.WireConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Wire+1) ', ''Value'', 1);'])
         else
-            eval(['set(BpodSystem.GUIHandles.WireConfigPort' num2str(x) ', ''Value'', 0);'])
+            eval(['set(BpodSystem.GUIHandles.WireConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Wire+1) ', ''Value'', 0);'])
         end
     end
 end
 
 function UpdatePortConfig(hObject,event)
 global BpodSystem
-for x = 1:8
-    eval(['BpodSystem.InputsEnabled.PortsEnabled(' num2str(x) ') = get(BpodSystem.GUIHandles.PortConfigPort' num2str(x) ', ''Value'');'])
+PortChannels = find(BpodSystem.HW.Inputs == 'P');
+for x = PortChannels
+    eval(['BpodSystem.InputsEnabled(' num2str(x) ') = get(BpodSystem.GUIHandles.PortConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Port+1) ', ''Value'');'])
 end
 if BpodSystem.FirmwareBuild < 8
-    for x = 1:4
-        eval(['BpodSystem.InputsEnabled.WiresEnabled(' num2str(x) ') = get(BpodSystem.GUIHandles.WireConfigPort' num2str(x) ', ''Value'');'])
+    WireChannels = find(BpodSystem.HW.Inputs == 'W');
+    for x = WireChannels
+        eval(['BpodSystem.InputsEnabled(' num2str(x) ') = get(BpodSystem.GUIHandles.WireConfigPort' num2str(x-BpodSystem.HW.Pos.Input_Wire+1) ', ''Value'');'])
+    end
+end
+% Enable ports
+if ~BpodSystem.EmulatorMode
+    BpodSystem.SerialPort.write(['E' BpodSystem.InputsEnabled], 'uint8');
+    Confirmed = BpodSystem.SerialPort.read(1, 'uint8');
+    if Confirmed ~= 1
+        error('Failed to enable ports');
     end
 end
 BpodInputConfig = BpodSystem.InputsEnabled;
-save (BpodSystem.InputConfigPath, 'BpodInputConfig');
+save (BpodSystem.Path.InputConfig, 'BpodInputConfig');

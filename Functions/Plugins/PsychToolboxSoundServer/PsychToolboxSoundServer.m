@@ -55,10 +55,11 @@ switch Function
                     end
                 end
             elseif ismac
+                error('Error: PsychToolboxSoundServer does not work on OS X.')
             else
                 for x = 1:nDevices
                     DeviceName = AudioDevices(x).DeviceName;
-                    if ~isempty(strfind(DeviceName, 'Xonar DX: Multichannel')) || ~isempty(strfind(DeviceName, 'Xonar U7: USB Audio')) % Assumes ASUS Xonar DX or U7 Soundcard
+                    if sum(strcmpi(DeviceName(1:4), {'ASIO', 'XONA', 'ASUS'})) > 0 % Assumes ASUS Xonar series or other Asio Soundcard
                         if AudioDevices(x).NrOutputChannels == 8
                             nCandidates = nCandidates + 1;
                             CandidateDevices(nCandidates) = AudioDevices(x).DeviceIndex;
@@ -73,11 +74,10 @@ switch Function
                     try
                         CandidateDevice = PsychPortAudio('Open', CandidateDevices(x), 9, 4, SF, 6 , 32);
                         BpodSystem.SystemSettings.SoundDeviceID = CandidateDevices(x);
-                        SaveBpodSystemSettings;
                         PsychPortAudio('Close', CandidateDevice);
                         disp('Success! A compatible sound card was detected and stored in Bpod settings.')
                     catch
-                        
+                        disp('ERROR!')
                     end
                 end
             else

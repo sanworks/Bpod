@@ -1,6 +1,8 @@
 function varargout = BpodLiquidCalibration(op, varargin)
 global BpodSystem
-AssertBpodSystemObject(BpodSystem);
+if isempty(isprop(BpodSystem, 'BpodPath'))
+    error('You must run Bpod before using this function.');
+end
 ValveListboxString = {'Valve1', 'Valve2', 'Valve3', 'Valve4', 'Valve5', 'Valve6', 'Valve7', 'Valve8'};
 switch lower(op)
     case 'calibrate' % Launch the GUI
@@ -40,20 +42,10 @@ switch lower(op)
         
         % Setup calibration
         BpodSystem.PluginObjects.LiquidCal.PendingMeasurements = cell(1,8);
-        CalibrationFilePath = fullfile(BpodSystem.BpodPath, 'Calibration Files', 'LiquidCalibration.mat');
-        if exist(CalibrationFilePath) == 2
-            load(CalibrationFilePath);
-        else
-            % Calibration files were not found. Set up blank.
-            LiquidCal = struct;
-            for valve = 1:8
-                LiquidCal(valve).Table = [];
-                LiquidCal(valve).Coeffs = [];
-            end
-        end
-        
+        CalibrationFilePath = fullfile(BpodSystem.Path.LocalDir, 'Calibration Files', 'LiquidCalibration.mat');
+        load(CalibrationFilePath);
         BpodSystem.PluginObjects.LiquidCal.CalData = LiquidCal;
-        BpodSystem.PluginObjects.LiquidCal.CalibrationTargetRange = [2 50];
+        BpodSystem.PluginObjects.LiquidCal.CalibrationTargetRange = [2 10];
         DisplayValve;
         
     case 'getvalvetimes'
@@ -329,11 +321,7 @@ if isPendingMeasurement == 0
         BpodSystem.PluginObjects.LiquidCal.CalData(CurrentValve).Coeffs = [];
     end
     % Save file
-    TestSavePath = fullfile(BpodSystem.BpodPath, 'Calibration Files');
-    if exist(TestSavePath) ~= 7
-        mkdir(TestSavePath);
-    end
-    SavePath = fullfile(BpodSystem.BpodPath, 'Calibration Files', 'LiquidCalibration.mat');
+    SavePath = fullfile(BpodSystem.Path.LocalDir, 'Calibration Files', 'LiquidCalibration.mat');
     LiquidCal = BpodSystem.PluginObjects.LiquidCal.CalData;
     LiquidCal(1).LastDateModified = now;
     save(SavePath, 'LiquidCal');
@@ -382,7 +370,7 @@ if ~isempty(CalData(8).Table);
     set(BpodSystem.PluginObjects.LiquidCal.CB8, 'Value', 1);
 end
 BpodSystem.PluginObjects.LiquidCal.LowRangeEdit = uicontrol('Style', 'edit', 'String', '2', 'Position', [248 71 35 30], 'FontWeight', 'bold', 'FontSize', 12, 'TooltipString', 'Enter a non-zero value for range minimum');
-BpodSystem.PluginObjects.LiquidCal.HighRangeEdit = uicontrol('Style', 'edit', 'String', '50', 'Position', [329 71 35 30], 'FontWeight', 'bold', 'FontSize', 12, 'TooltipString', 'Enter a non-zero value for range maximum');
+BpodSystem.PluginObjects.LiquidCal.HighRangeEdit = uicontrol('Style', 'edit', 'String', '10', 'Position', [329 71 35 30], 'FontWeight', 'bold', 'FontSize', 12, 'TooltipString', 'Enter a non-zero value for range maximum');
 set(BpodSystem.PluginObjects.LiquidCal.LowRangeEdit, 'String', num2str(BpodSystem.PluginObjects.LiquidCal.CalibrationTargetRange(1)));
 set(BpodSystem.PluginObjects.LiquidCal.HighRangeEdit, 'String', num2str(BpodSystem.PluginObjects.LiquidCal.CalibrationTargetRange(2)));
 BpodSystem.PluginObjects.LiquidCal.SuggestButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [150 10 120 50], 'Callback', @AddSuggestedPoints, 'CData', imread('SuggestButton.bmp'), 'TooltipString', 'Confirm');
@@ -452,7 +440,7 @@ if InvalidParams == 0
             DistanceVector = DistanceVector(Startpoint:Endpoint);
             Distances = zeros(1,length(DistanceVector));
             for y = 2:length(DistanceVector)
-                    Distances(y) = abs(DistanceVector(y) - DistanceVector(y-1));
+                Distances(y) = abs(DistanceVector(y) - DistanceVector(y-1));
             end
             [MaxDistance, MaxDistancePos] = max(Distances);
             SuggestedAmount = DistanceVector(MaxDistancePos-1) + (DistanceVector(MaxDistancePos)-DistanceVector(MaxDistancePos-1))/2;
@@ -467,7 +455,7 @@ if InvalidParams == 0
             end
         else
             if nMeasurements == 1
-                % Use a linear estimate 
+                % Use a linear estimate
                 ulPerMs = MeasuredAmounts/ValveDurations;
                 if (MeasuredAmounts < RangeLow) || (MeasuredAmounts > RangeHigh)
                     TargetAmount = (RangeHigh - RangeLow)/2;
@@ -539,48 +527,50 @@ if ~isempty(ValveIDs)
     % Deliver liquid
     k = msgbox('Please refill liquid reservoirs and click Ok to begin.', 'modal');
     waitfor(k);
-    RunRewardCal(str2double(get(BpodSystem.GUIHandles.LiquidCalibrator.nPulsesEdit, 'string')), ValveIDs, PulseDurations, .2);
-    
-    % Enter measurements:
-    
-    % Set up window
-    BpodSystem.GUIHandles.LiquidCalibrator.RunMeasurementsFig = figure('Position', [540 100 317 530],'numbertitle','off', 'MenuBar', 'none', 'Resize', 'off', 'Name', 'Enter pending measurements');
-    ha = axes('units','normalized', 'position',[0 0 1 1]);
-    uistack(ha,'bottom');
-    BG = imread('CuedMeasurementEntry.bmp');
-    image(BG); axis off;
-    BpodSystem.GUIHandles.LiquidCalibrator.CB1b = uicontrol('Style', 'edit', 'Position', [155 379 80 35], 'TooltipString', 'Enter liquid weight for valve 1', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB2b = uicontrol('Style', 'edit', 'Position', [155 336 80 35], 'TooltipString', 'Enter liquid weight for valve 2', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB3b = uicontrol('Style', 'edit', 'Position', [155 293 80 35], 'TooltipString', 'Enter liquid weight for valve 3', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB4b = uicontrol('Style', 'edit', 'Position', [155 250 80 35], 'TooltipString', 'Enter liquid weight for valve 4', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB5b = uicontrol('Style', 'edit', 'Position', [155 207 80 35], 'TooltipString', 'Enter liquid weight for valve 5', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB6b = uicontrol('Style', 'edit', 'Position', [155 164 80 35], 'TooltipString', 'Enter liquid weight for valve 6', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB7b = uicontrol('Style', 'edit', 'Position', [155 121 80 35], 'TooltipString', 'Enter liquid weight for valve 7', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    BpodSystem.GUIHandles.LiquidCalibrator.CB8b = uicontrol('Style', 'edit', 'Position', [155 78 80 35], 'TooltipString', 'Enter liquid weight for valve 8', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
-    MeasurementButtonGFX2 = imread('MeasurementEntryOkButtonBG.bmp');
-    BpodSystem.GUIHandles.LiquidCalibrator.EnterMeasurementButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [120 7 80 50], 'Callback', @AddCalMeasurements, 'TooltipString', 'Enter measurement', 'CData', MeasurementButtonGFX2);
-    
-    % Prompt for each valid measurement in order, un-hiding the GUI box and
-    % displaying a cursor triangle on the correct row
-    for y = 1:8
-        if isempty(find(y == ValveIDs))
-            eval(['set(BpodSystem.GUIHandles.LiquidCalibrator.CB' num2str(y) 'b, ''Enable'', ''off'')'])
-        else
-            eval(['set(BpodSystem.GUIHandles.LiquidCalibrator.CB' num2str(y) 'b, ''Enable'', ''on'', ''BackgroundColor'', [.6 .9 .6])'])
+    Completed = RunRewardCal(str2double(get(BpodSystem.GUIHandles.LiquidCalibrator.nPulsesEdit, 'string')), ValveIDs, PulseDurations, .2);
+    if Completed
+        % Enter measurements:
+        
+        % Set up window
+        BpodSystem.GUIHandles.LiquidCalibrator.RunMeasurementsFig = figure('Position', [540 100 317 530],'numbertitle','off', 'MenuBar', 'none', 'Resize', 'off', 'Name', 'Enter pending measurements');
+        ha = axes('units','normalized', 'position',[0 0 1 1]);
+        uistack(ha,'bottom');
+        BG = imread('CuedMeasurementEntry.bmp');
+        image(BG); axis off;
+        BpodSystem.GUIHandles.LiquidCalibrator.CB1b = uicontrol('Style', 'edit', 'Position', [155 379 80 35], 'TooltipString', 'Enter liquid weight for valve 1', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB2b = uicontrol('Style', 'edit', 'Position', [155 336 80 35], 'TooltipString', 'Enter liquid weight for valve 2', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB3b = uicontrol('Style', 'edit', 'Position', [155 293 80 35], 'TooltipString', 'Enter liquid weight for valve 3', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB4b = uicontrol('Style', 'edit', 'Position', [155 250 80 35], 'TooltipString', 'Enter liquid weight for valve 4', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB5b = uicontrol('Style', 'edit', 'Position', [155 207 80 35], 'TooltipString', 'Enter liquid weight for valve 5', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB6b = uicontrol('Style', 'edit', 'Position', [155 164 80 35], 'TooltipString', 'Enter liquid weight for valve 6', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB7b = uicontrol('Style', 'edit', 'Position', [155 121 80 35], 'TooltipString', 'Enter liquid weight for valve 7', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        BpodSystem.GUIHandles.LiquidCalibrator.CB8b = uicontrol('Style', 'edit', 'Position', [155 78 80 35], 'TooltipString', 'Enter liquid weight for valve 8', 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.9 .9 .9]);
+        MeasurementButtonGFX2 = imread('MeasurementEntryOkButtonBG.bmp');
+        BpodSystem.GUIHandles.LiquidCalibrator.EnterMeasurementButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [120 7 80 50], 'Callback', @AddCalMeasurements, 'TooltipString', 'Enter measurement', 'CData', MeasurementButtonGFX2);
+        
+        % Prompt for each valid measurement in order, un-hiding the GUI box and
+        % displaying a cursor triangle on the correct row
+        for y = 1:8
+            if isempty(find(y == ValveIDs))
+                eval(['set(BpodSystem.GUIHandles.LiquidCalibrator.CB' num2str(y) 'b, ''Enable'', ''off'')'])
+            else
+                eval(['set(BpodSystem.GUIHandles.LiquidCalibrator.CB' num2str(y) 'b, ''Enable'', ''on'', ''BackgroundColor'', [.6 .9 .6])'])
+            end
         end
+        drawnow;
     end
-    drawnow;
 end
 
-function RunRewardCal(nPulses, TargetValves, PulseDurations, PulseInterval)
+function Completed = RunRewardCal(nPulses, TargetValves, PulseDurations, PulseInterval)
 % TargetValves = vector listing valves (in range 1-8) that are to be calibrated
 % PulseDurations = for each valid valve, specify the time (in ms) for the valve to remain open.
 % Pulse Interval = fixed delay between valve pulses
 global BpodSystem
+Completed = 0;
 % Replace with settings
 ValvePhysicalAddress = 2.^(0:7);
 nValves = length(TargetValves);
-PulseDurations = NanOutZeros(PulseDurations);
+PulseDurations(PulseDurations == 0) = NaN;
 if sum(PulseDurations > 1) > 0
     error('Pulse durations should be specified in seconds.')
 end
@@ -593,34 +583,39 @@ end
 progressbar;
 sma = NewStateMatrix();
 for y = 1:nValves
-        sma = AddState(sma, 'Name', ['PulseValve' num2str(TargetValves(y))], ...
-            'Timer', PulseDurations(y),...
-            'StateChangeConditions', ...
-            {'Tup', ['Delay' num2str(y)]},...
-            'OutputActions', {'ValveState', ValvePhysicalAddress(TargetValves(y))});
-        if y < nValves
+    sma = AddState(sma, 'Name', ['PulseValve' num2str(TargetValves(y))], ...
+        'Timer', PulseDurations(y),...
+        'StateChangeConditions', ...
+        {'Tup', ['Delay' num2str(y)]},...
+        'OutputActions', {'ValveState', ValvePhysicalAddress(TargetValves(y))});
+    if y < nValves
         sma = AddState(sma, 'Name', ['Delay' num2str(y)], ...
             'Timer', PulseInterval,...
             'StateChangeConditions', ...
             {'Tup', ['PulseValve' num2str(TargetValves(y+1))]},...
             'OutputActions', {});
-        else
-            sma = AddState(sma, 'Name', ['Delay' num2str(y)], ...
+    else
+        sma = AddState(sma, 'Name', ['Delay' num2str(y)], ...
             'Timer', PulseInterval,...
             'StateChangeConditions', ...
             {'Tup', 'exit'},...
             'OutputActions', {});
-        end
+    end
 end
 SendStateMatrix(sma);
 for x = 1:nPulses
     progressbar(x/nPulses)
-    if BpodSystem.EmulatorMode == 0      
+    if BpodSystem.EmulatorMode == 0
         RunStateMatrix;
         pause(.5);
     end
+    if BpodSystem.Status.BeingUsed == 0
+        progressbar(1);
+        return
+    end
 end
-BpodSystem.BeingUsed = 0;
+Completed = 1;
+BpodSystem.Status.BeingUsed = 0;
 
 function AddCalMeasurements(varargin)
 global BpodSystem
@@ -691,16 +686,16 @@ if AllValid == 1
         end
     end
     BpodSystem.PluginObjects.LiquidCal.PendingMeasurements = PendingMeasurements;
-
+    
     % Call the Listbox 1 call back in
     % LiquidCalibrationManager to reflect the new pending measurements vector
     
     % Save file
-    TestSavePath = fullfile(BpodSystem.BpodPath, 'Calibration Files');
+    TestSavePath = fullfile(BpodSystem.Path.BpodRoot, 'Calibration Files');
     if exist(TestSavePath) ~= 7
         mkdir(TestSavePath);
     end
-    SavePath = fullfile(BpodSystem.BpodPath, 'Calibration Files', 'LiquidCalibration.mat');
+    SavePath = fullfile(BpodSystem.Path.LocalDir, 'Calibration Files', 'LiquidCalibration.mat');
     LiquidCal = BpodSystem.PluginObjects.LiquidCal.CalData;
     LiquidCal(1).LastDateModified = now;
     save(SavePath, 'LiquidCal');
@@ -758,7 +753,7 @@ BpodSystem.GUIHandles.LiquidCalibrator.ResultsListbox = uicontrol('Style', 'list
 jScrollPane = findjobj(BpodSystem.GUIHandles.LiquidCalibrator.ResultsListbox); % get the scroll-pane object
 jListbox = jScrollPane.getViewport.getComponent(0);
 jListbox.setBackground(javax.swing.plaf.ColorUIResource(.85,.85,.85));
- 
+
 DeliverButtonGFX = imread('TestDeliverButton.bmp');
 BpodSystem.GUIHandles.LiquidCalibrator.DeliverButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [40 300 325 50], 'Callback', @RunSpecificAmount, 'TooltipString', 'Start liquid delivery', 'CData', DeliverButtonGFX);
 BpodSystem.GUIHandles.LiquidCalibrator.MeasuredAmtEdit = uicontrol('Style', 'edit', 'String', '---', 'Position', [202 238 55 30], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.88 .88 .88], 'Enable', 'off');
@@ -810,13 +805,15 @@ if InvalidParams == 0
     set(BpodSystem.GUIHandles.LiquidCalibrator.MeasuredValveText, 'String', num2str(TargetValves(1)));
     drawnow;
     % Call calibration script
-    RunRewardCal(nPulses, TargetValves, PulseDurations, .2);
+    Completed = RunRewardCal(nPulses, TargetValves, PulseDurations, .2);
 else
     warndlg('Invalid settings detected. Check setup.', 'Error', 'modal');
 end
-% Get measurements
-set(BpodSystem.GUIHandles.LiquidCalibrator.MeasuredAmtEdit, 'String', '', 'Enable', 'on');
-uicontrol(BpodSystem.GUIHandles.LiquidCalibrator.MeasuredAmtEdit);
+if Completed
+    % Get measurements
+    set(BpodSystem.GUIHandles.LiquidCalibrator.MeasuredAmtEdit, 'String', '', 'Enable', 'on');
+    uicontrol(BpodSystem.GUIHandles.LiquidCalibrator.MeasuredAmtEdit);
+end
 
 function EnterTestCal(varargin)
 global BpodSystem

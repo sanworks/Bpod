@@ -74,7 +74,12 @@ switch Action
         BpodSystem.GUIHandles.RewardedCorrectLine = line([0,0],[0,0], 'LineStyle','none','Marker','o','MarkerEdge','g','MarkerFace','g', 'MarkerSize',6);
         BpodSystem.GUIHandles.UnrewardedCorrectLine = line([0,0],[0,0], 'LineStyle','none','Marker','o','MarkerEdge','g','MarkerFace',[1 1 1], 'MarkerSize',6);
         BpodSystem.GUIHandles.NoResponseLine = line([0,0],[0,0], 'LineStyle','none','Marker','o','MarkerEdge','b','MarkerFace',[1 1 1], 'MarkerSize',6);
-        set(AxesHandle,'TickDir', 'out','YLim', [-MaxTrialType-.5, -.5], 'YTick', -MaxTrialType:1:-1,'YTickLabel', strsplit(num2str(MaxTrialType:-1:-1)), 'FontSize', 16);
+        if verLessThan('matlab','8.0')
+            Ylabel = Split(num2str(MaxTrialType:-1:-1));
+        else
+            Ylabel = strsplit(num2str(MaxTrialType:-1:-1));
+        end
+        set(AxesHandle,'TickDir', 'out','YLim', [-MaxTrialType-.5, -.5], 'YTick', -MaxTrialType:1:-1,'YTickLabel', Ylabel, 'FontSize', 16);
         xlabel(AxesHandle, 'Trial#', 'FontSize', 18);
         ylabel(AxesHandle, 'Trial Type', 'FontSize', 16);
         hold(AxesHandle, 'on');
@@ -84,7 +89,12 @@ switch Action
         TrialTypeList = varargin{2};
         OutcomeRecord = varargin{3};
         MaxTrialType = max(TrialTypeList);
-        set(AxesHandle,'YLim',[-MaxTrialType-.5, -.5], 'YTick', -MaxTrialType:1:-1,'YTickLabel', strsplit(num2str(MaxTrialType:-1:-1)));
+        if verLessThan('matlab','8.0')
+            Ylabel = Split(num2str(MaxTrialType:-1:-1));
+        else
+            Ylabel = strsplit(num2str(MaxTrialType:-1:-1));
+        end
+        set(AxesHandle,'YLim',[-MaxTrialType-.5, -.5], 'YTick', -MaxTrialType:1:-1,'YTickLabel', Ylabel);
         if CurrentTrial<1
             CurrentTrial = 1;
         end
@@ -136,4 +146,21 @@ mx = mn + nTrialsToShow - 1;
 set(AxesHandle,'XLim',[mn-1 mx+1]);
 end
 
+function SplitString = Split(s)
+    w = isspace(s);            
+    if any(w)
+        % decide the positions of terms        
+        dw = diff(w);
+        sp = [1, find(dw == -1) + 1];     % start positions of terms
+        ep = [find(dw == 1), length(s)];  % end positions of terms
 
+        % extract the terms        
+        nt = numel(sp);
+        SplitString = cell(1, nt);
+        for i = 1 : nt
+            SplitString{i} = s(sp(i):ep(i));
+        end                
+    else
+        SplitString = {s};
+    end
+end

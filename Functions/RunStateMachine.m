@@ -210,26 +210,23 @@ if BpodSystem.Status.BeingUsed == 1
     % Accept Timestamps
     if BpodSystem.EmulatorMode == 0
         TrialStartTimestamp =  double(BpodSystem.SerialPort.read(1, 'uint32'))/1000; % Start-time of the trial in milliseconds (immune to 32-bit clock rollover)
-        TrialStartMicroseconds = double(BpodSystem.SerialPort.read(1, 'uint32')); % Time the trial started (in microseconds)
-        TrialStartMilliseconds = TrialStartMicroseconds/1000;
         nTimeStamps = double(BpodSystem.SerialPort.read(1, 'uint16'));
         TimeStamps = double(BpodSystem.SerialPort.read(nTimeStamps, 'uint32'));
         TimeScaleFactor = (BpodSystem.HW.CyclePeriod/1000);
         TimeStamps = TimeStamps*TimeScaleFactor;
     else
         TrialStartTimestamp = BpodSystem.Emulator.MatrixStartTime-(BpodSystem.Status.BpodStartTime*100000);
-        TrialStartMilliseconds = TrialStartTimestamp*1000;
-        TimeStamps = (BpodSystem.Emulator.Timestamps(1:BpodSystem.Emulator.nEvents)*1000) + TrialStartMilliseconds;
+        TimeStamps = (BpodSystem.Emulator.Timestamps(1:BpodSystem.Emulator.nEvents)*1000);
     end
     StateChangeIndexes = StateChangeIndexes(1:nStates-1);
     EventTimeStamps = TimeStamps;
     StateTimeStamps = zeros(1,nStates);
     StateTimeStamps(2:nStates) = TimeStamps(StateChangeIndexes); % Figure out StateChangeIndexes has a "change" event for sma start (longer than nEvents)
-    StateTimeStamps(1) = TrialStartMilliseconds;
+    StateTimeStamps(1) = 0;
     RawTrialEvents.States = States;
     RawTrialEvents.Events = Events;
-    RawTrialEvents.StateTimestamps = Round2Millis(StateTimeStamps-TrialStartMilliseconds)/1000; % Convert to seconds
-    RawTrialEvents.EventTimestamps = Round2Millis(EventTimeStamps-TrialStartMilliseconds)/1000;
+    RawTrialEvents.StateTimestamps = Round2Millis(StateTimeStamps)/1000; % Convert to seconds
+    RawTrialEvents.EventTimestamps = Round2Millis(EventTimeStamps)/1000;
     RawTrialEvents.TrialStartTimestamp = Round2Millis(TrialStartTimestamp);
     RawTrialEvents.StateTimestamps(end+1) = RawTrialEvents.EventTimestamps(end);
 end

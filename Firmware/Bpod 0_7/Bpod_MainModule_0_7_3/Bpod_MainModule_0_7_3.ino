@@ -18,7 +18,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Bpod Finite State Machine v 0.5
+// Bpod Finite State Machine v 0.7.2
 //
 // Requires the DueTimer library from:
 // https://github.com/ivanseidel/DueTimer
@@ -27,7 +27,7 @@
 // change the PWM_FREQUENCY and TC_FREQUENCY constants to 50000 in the file /Arduino/hardware/arduino/sam/variants/arduino_due_x/variant.h
 // or in Windows, \Users\Username\AppData\Local\Arduino15\packages\arduino\hardware\sam\1.6.7\variants\arduino_due_x\variant.h
 
-#define FirmwareBuildVersion 5
+#define FirmwareBuildVersion 9
 #include <DueTimer.h>
 #include <SPI.h>
 #include "ArCOM.h" // ArCOM is a serial interface wrapper developed by Sanworks, to streamline transmission of datatypes and arrays over serial
@@ -559,7 +559,6 @@ void handler() { // This is the timer handler function, which is called every (t
         BpodCOM.readByteArray(GlobalCounterAttachedEvents, nGlobalCounters); // Get global counter attached events
         BpodCOM.readByteArray(ConditionChannels, nConditions); // Get condition channels
         BpodCOM.readByteArray(ConditionValues, nConditions); // Get condition values
-        //BpodCOM.readByteArray(digitalInputEnabled, nDigitalInputs); // Get input channel configurtaion
         BpodCOM.readUint32Array(StateTimers, nStates); // Get state timers
         BpodCOM.readUint32Array(GlobalTimers, nGlobalTimers); // Get global timers
         BpodCOM.readUint32Array(GlobalCounterThresholds, nGlobalCounters); // Get global counter event count thresholds
@@ -847,7 +846,7 @@ void handler() { // This is the timer handler function, which is called every (t
     serialByteBuffer[1] = 1; // Read one event
     serialByteBuffer[2] = 255; // Send Matrix-end code
     BpodCOM.writeByteArray(serialByteBuffer, 3);
-    // Send trial-start timestamp (in milliseconds)
+    // Send trial-start timestamp (from millis() clock)
     BpodCOM.writeUint32(MatrixStartTimeMillis - SessionStartTime);
     BpodCOM.writeUint16(nEvents);
     #if FirmwareBuildVersion > 7

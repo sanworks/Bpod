@@ -236,11 +236,15 @@ classdef BpodObject < handle
                 obj.HW.Outputs = 'UUUXSBBWWWPPPPPPPP';
                 close(obj.GUIHandles.LaunchEmuFig);
                 disp('Connection aborted. Bpod started in Emulator mode.')
-                obj.FirmwareBuild = 8;
+                obj.FirmwareBuild = 9;
             else
                 % Get firmware version
                 obj.SerialPort.write('F', 'uint8'); 
                 obj.FirmwareBuild = obj.SerialPort.read(1, 'uint32');
+                obsoleteFirmware = [7 8];
+                if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
+                    error('Old firmware detected. Please update Bpod firmware, restart MATLAB and try again.')
+                end
                 % Request hardware description
                 obj.SerialPort.write('H', 'uint8');
                 obj.HW.n = struct; % Stores total numbers of different types of channels (e.g. 5 BNC input channels)

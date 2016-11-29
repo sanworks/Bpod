@@ -18,7 +18,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Bpod Finite State Machine v 0.5
+// Bpod Finite State Machine v 0.7.2
 //
 // Requires the DueTimer library from:
 // https://github.com/ivanseidel/DueTimer
@@ -559,7 +559,6 @@ void handler() { // This is the timer handler function, which is called every (t
         BpodCOM.readByteArray(GlobalCounterAttachedEvents, nGlobalCounters); // Get global counter attached events
         BpodCOM.readByteArray(ConditionChannels, nConditions); // Get condition channels
         BpodCOM.readByteArray(ConditionValues, nConditions); // Get condition values
-        //BpodCOM.readByteArray(digitalInputEnabled, nDigitalInputs); // Get input channel configurtaion
         BpodCOM.readUint32Array(StateTimers, nStates); // Get state timers
         BpodCOM.readUint32Array(GlobalTimers, nGlobalTimers); // Get global timers
         BpodCOM.readUint32Array(GlobalCounterThresholds, nGlobalCounters); // Get global counter event count thresholds

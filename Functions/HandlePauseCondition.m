@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 function HandlePauseCondition
 global BpodSystem
 if BpodSystem.Status.Pause == 1
-    set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.Graphics.GoButton, 'TooltipString', 'Press to resume');
+    set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.GoButton, 'TooltipString', 'Press to resume');
     disp('Protocol paused. Press the "play" button to resume.')
     set(BpodSystem.GUIHandles.CxnDisplay, 'String', 'PAUSED', 'FontSize', 11);
     ColorState = 0;

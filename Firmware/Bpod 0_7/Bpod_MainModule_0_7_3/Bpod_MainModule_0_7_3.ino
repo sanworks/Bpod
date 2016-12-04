@@ -18,7 +18,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Bpod Finite State Machine v 0.7.2
+// Bpod Finite State Machine v 0.7.3
 //
 // Requires the DueTimer library from:
 // https://github.com/ivanseidel/DueTimer

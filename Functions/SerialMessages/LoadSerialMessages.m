@@ -31,6 +31,7 @@ global BpodSystem
 nMessages = length(Messages);
 if ischar(Messages)
     Messages = {Messages};
+    nMessages = 1;
 end
 SerialMessage = zeros(1,nMessages*4); % Preallocate
 if nargin > 3

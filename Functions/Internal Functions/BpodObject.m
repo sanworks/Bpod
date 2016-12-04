@@ -197,26 +197,34 @@ classdef BpodObject < handle
             end
             nPorts = length(Ports);
             Found = 0;
-            for iPort = 1:nPorts
+            iPort = 1;
+            while (Found == 0) && (iPort <= nPorts)
                 ThisPort = Ports{iPort};
                 disp(['Trying port: ' ThisPort])
                 obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200);
                 obj.SerialPort.write('6', 'uint8');
-                Reply = obj.SerialPort.read(1, 'uint8');
-                if Reply == '5'
-                    Found = 1;
-                    obj.Status.SerialPortName = ThisPort;
+                pause(.1)
+                if obj.SerialPort.bytesAvailable > 0
+                    Reply = obj.SerialPort.read(1, 'uint8');
+                    if Reply == '5'
+                        Found = 1;
+                        thisPortIndex = iPort;
+                        obj.Status.SerialPortName = ThisPort;
+                    else
+                        obj.SerialPort.delete;
+                    end
                 else
                     obj.SerialPort.delete;
                 end
+                iPort = iPort + 1;
             end
             if Found
                 obj.EmulatorMode = 0;
             else
                 error('Error: Could not find Bpod device.');
             end
-            disp(['Bpod connected on port ' Ports{Found}])
-            obj.SystemSettings.LastCOMPort = Ports{Found};
+            disp(['Bpod connected on port ' Ports{thisPortIndex}])
+            obj.SystemSettings.LastCOMPort = Ports{thisPortIndex};
             obj.SaveSettings;
             obj.EmulatorMode = 0;
             obj.BpodSplashScreen(2);

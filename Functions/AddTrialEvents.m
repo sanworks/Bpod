@@ -66,19 +66,15 @@ for x = 1:length(States)
     UniqueStateDataMatrices{UniqueStateIndexes(x)} = [UniqueStateDataMatrices{UniqueStateIndexes(x)}; [RawTrialEvents.StateTimestamps(x) RawTrialEvents.StateTimestamps(x+1)]];
 end
 for x = 1:nUniqueStates
-    %eval(['TE.RawEvents.Trial{' num2str(TrialNum) '}.States.' BpodSystem.StateMatrix.StateNames{UniqueStates(x)} ' = UniqueStateDataMatrices{x};'])
     TE.RawEvents.Trial{TrialNum}.States.(BpodSystem.StateMatrix.StateNames{UniqueStates(x)}) = UniqueStateDataMatrices{x};
-    % Note: Modify this to handle states that recur multiple times
 end
 for x = 1:nPossibleStates
     if VisitedStates(x) == 0
-        %eval(['TE.RawEvents.Trial{' num2str(TrialNum) '}.States.' BpodSystem.StateMatrix.StateNames{x} ' = [NaN NaN];'])
         TE.RawEvents.Trial{TrialNum}.States.(BpodSystem.StateMatrix.StateNames{x}) = [NaN NaN];
     end
 end
 Events = RawTrialEvents.Events;
 for x = 1:length(Events)
-    %eval(['TE.RawEvents.Trial{' num2str(TrialNum) '}.Events.' BpodSystem.EventNames{Events(x)} ' = [' num2str(RawTrialEvents.EventTimestamps(Events == Events(x))) '];'])
     TE.RawEvents.Trial{TrialNum}.Events.(BpodSystem.StateMachineInfo.EventNames{Events(x)}) = RawTrialEvents.EventTimestamps(Events == Events(x));
 end
 TE.RawData.OriginalStateNamesByNumber{TrialNum} = BpodSystem.StateMatrix.StateNames;

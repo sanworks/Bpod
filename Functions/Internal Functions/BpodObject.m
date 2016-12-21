@@ -53,7 +53,7 @@ classdef BpodObject < handle
         ProtocolSelectorLastValue % Last protocol selected in UI
         SplashData % Splash screen frames
         LastHardwareState % Last known state of I/O lines and serial codes
-        CycleMonitoring % 0 = off, 1 = on. Measures min and max actual hardware timer callback execution time 
+        CycleMonitoring % 0 = off, 1 = on. Measures min and max actual hardware timer callback execution time
     end
     methods
         function obj = BpodObject %Constructor
@@ -72,19 +72,28 @@ classdef BpodObject < handle
             if (sum(strcmp(F, 'OCRAStd')) == 0) && (sum(strcmp(F, 'OCR A Std')) == 0)
                 disp('ALERT! Bpod needs to install a system font in order to continue.')
                 input('Press enter to install the font...');
+                FontInstalled = 0;
                 try
                     if ispc
                         system(fullfile(BpodPath, 'Assets', 'Fonts', 'OCRASTD.otf'));
-                        error('After installing the font, please restart Bpod.');
+                        FontInstalled = 1;
                     elseif ismac
                         copyfile(fullfile(BpodPath, 'Assets', 'Fonts', 'OCRASTD.otf'), '/Library/Fonts');
-                        error('Font installed. Please restart Bpod.');
+                        FontInstalled = 1;
                     else
-                        system(fullfile(BpodPath, 'Assets', 'Fonts', 'OCRAStd.otf'));
+                        disp('Please install the font using the Ubuntu font viewer, and close the font viewer to continue.')
+                        MatlabPath = getenv('LD_LIBRARY_PATH');
+                        setenv('LD_LIBRARY_PATH',getenv('PATH'));
+                        FontPath = fullfile(BpodPath, 'Assets', 'Fonts', 'OCRAStd.otf');
+                        system(['gnome-font-viewer ' FontPath]);
+                        setenv('LD_LIBRARY_PATH',MatlabPath);
+                        FontInstalled = 1;
                     end
-                    
                 catch
-                    error('Bpod was unable to install the font. Please install it manually from /Bpod/Media/Fonts/OCRASTD, and restart MATLAB.')
+                    error('Bpod was unable to install the font. Please install it manually from /Bpod/Media/Fonts/OCRASTD, and restart MATLAB. If you are having trouble, try running "sudo apt dist-upgrade" from a terminal before launching font viewer.')
+                end
+                if FontInstalled
+                    error('Font installed. Please restart MATLAB and run Bpod again.')
                 end
             end
             obj.SplashData.BG = SplashBGData;
@@ -154,7 +163,7 @@ classdef BpodObject < handle
             CalFolder = fullfile(obj.Path.LocalDir,'Calibration Files');
             if ~exist(CalFolder)
                 mkdir(CalFolder);
-                copyfile(fullfile(obj.Path.BpodRoot, 'Examples', 'Example Calibration Files'), CalFolder); 
+                copyfile(fullfile(obj.Path.BpodRoot, 'Examples', 'Example Calibration Files'), CalFolder);
                 questdlg('Calibration folder created in /BpodLocal/. Replace example calibration files soon.', ...
                     'Calibration folder not found', ...
                     'Ok', 'Ok');
@@ -247,7 +256,7 @@ classdef BpodObject < handle
                 obj.FirmwareBuild = 9;
             else
                 % Get firmware version
-                obj.SerialPort.write('F', 'uint8'); 
+                obj.SerialPort.write('F', 'uint8');
                 obj.FirmwareBuild = obj.SerialPort.read(1, 'uint32');
                 obsoleteFirmware = [7 8];
                 if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
@@ -590,12 +599,12 @@ classdef BpodObject < handle
                 TitleColor = [0.9 0 0];
             end
             if ispc
-                Vsm = 10; Sm = 12; Med = 13; Lg = 20; 
+                Vsm = 10; Sm = 12; Med = 13; Lg = 20;
             elseif ismac
-                Vsm = 14; Sm = 16; Med = 17; Lg = 22; 
+                Vsm = 14; Sm = 16; Med = 17; Lg = 22;
                 FontName = 'Arial';
             else
-                Vsm = 10; Sm = 12; Med = 13; Lg = 20; 
+                Vsm = 10; Sm = 12; Med = 13; Lg = 20;
             end
             text(15, 30, Title, 'FontName', TitleFontName, 'FontSize', Lg, 'Color', TitleColor);
             line([280 770], [30 30], 'Color', LabelFontColor, 'LineWidth', 4);
@@ -908,7 +917,7 @@ classdef BpodObject < handle
             obj.ProtocolSelectorLastValue = currentValue;
         end
         function monitoring(obj,state)
-            obj.SerialPort.write(['Q' state], 'uint8'); 
+            obj.SerialPort.write(['Q' state], 'uint8');
             switch(state)
                 case 0
                     disp('Cycle monitoring OFF.');
@@ -919,7 +928,7 @@ classdef BpodObject < handle
         end
         function returnMonitorStats(obj)
             if obj.CycleMonitoring
-                obj.SerialPort.write('#', 'uint8'); 
+                obj.SerialPort.write('#', 'uint8');
                 CallbackRange = obj.SerialPort.read(2, 'uint16');
                 disp(['Minimum cycle duration measured: ' num2str(CallbackRange(1)) 'us']);
                 disp(['Maximum cycle duration measured: ' num2str(CallbackRange(2)) 'us']);

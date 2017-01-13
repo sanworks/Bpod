@@ -1,6 +1,6 @@
 % Example state matrix: Single state; one second pause
 
-sma = NewStateMatrix();
+sma = NewStateMachine;
 
 sma = AddState(sma, 'Name', 'MyState', ...
     'Timer', 1,...

@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Bpod repository
-Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
+Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -34,6 +34,15 @@ if BpodSystem.EmulatorMode == 0
         trash = BpodSystem.SerialPort.read(BpodSystem.SerialPort.bytesAvailable, 'uint8');
     end
     BpodSystem.SerialPort.write('R', 'uint8'); % Send the code to run the loaded matrix (character "R" for Run)
+    if BpodSystem.Status.NewStateMachineSent % Read confirmation byte = successful state machine transmission
+        SMA_Confirmed = BpodSystem.SerialPort.read(1, 'uint8');
+        if isempty(SMA_Confirmed) 
+            error('Error: The last state machine sent was not acknowledged by the Bpod device.');
+        elseif SMA_Confirmed ~= 1
+            error('Error: The last state machine sent was not acknowledged by the Bpod device.');
+        end
+        BpodSystem.Status.NewStateMachineSent = 0;
+    end
 end
 EventNames = BpodSystem.StateMachineInfo.EventNames;
 MaxEvents = 10000;
@@ -47,15 +56,18 @@ BpodSystem.Status.LastStateCode = 0;
 BpodSystem.Status.CurrentStateCode = 1;
 BpodSystem.Status.LastStateName = 'None';
 BpodSystem.Status.CurrentStateName = StateNames{1};
+BpodSystem.HardwareState.OutputOverride(1:end) = 0;
 InputMatrix = BpodSystem.StateMatrix.InputMatrix;
-GlobalTimerMatrix = BpodSystem.StateMatrix.GlobalTimerMatrix;
+GlobalTimerStartMatrix = BpodSystem.StateMatrix.GlobalTimerStartMatrix;
+GlobalTimerEndMatrix = BpodSystem.StateMatrix.GlobalTimerEndMatrix;
 GlobalCounterMatrix = BpodSystem.StateMatrix.GlobalCounterMatrix;
 ConditionMatrix = BpodSystem.StateMatrix.ConditionMatrix;
 StateTimerMatrix = BpodSystem.StateMatrix.StateTimerMatrix;
-GlobalTimerOffset = BpodSystem.StateMatrix.meta.InputMatrixSize;
-GlobalCounterOffset = GlobalTimerOffset+5;
-ConditionOffset = GlobalCounterOffset+5;
-JumpOffset = ConditionOffset+5;
+GlobalTimerStartOffset = BpodSystem.StateMatrix.meta.InputMatrixSize+1;
+GlobalTimerEndOffset = GlobalTimerStartOffset+BpodSystem.HW.n.GlobalTimers;
+GlobalCounterOffset = GlobalTimerEndOffset+BpodSystem.HW.n.GlobalTimers;
+ConditionOffset = GlobalCounterOffset+BpodSystem.HW.n.GlobalCounters;
+JumpOffset = ConditionOffset+BpodSystem.HW.n.Conditions;
 
 nTotalStates = BpodSystem.StateMatrix.nStatesInManifest;
 BpodSystem.RefreshGUI; % Reads BpodSystem.HardwareState and BpodSystem.LastEvent to commander GUI.
@@ -115,10 +127,12 @@ while BpodSystem.Status.InStateMatrix
                     if CurrentEvent(i) == 255
                         BpodSystem.Status.InStateMatrix = 0;
                         break
-                    elseif CurrentEvent(i) < GlobalTimerOffset
+                    elseif CurrentEvent(i) < GlobalTimerStartOffset
                         NewState = InputMatrix(BpodSystem.Status.CurrentStateCode, CurrentEvent(i));
+                    elseif CurrentEvent(i) < GlobalTimerEndOffset
+                        NewState = GlobalTimerStartMatrix(BpodSystem.Status.CurrentStateCode, CurrentEvent(i)-(GlobalTimerStartOffset-1));
                     elseif CurrentEvent(i) < GlobalCounterOffset
-                        NewState = GlobalTimerMatrix(BpodSystem.Status.CurrentStateCode, CurrentEvent(i)-(GlobalTimerOffset-1));
+                        NewState = GlobalTimerEndMatrix(BpodSystem.Status.CurrentStateCode, CurrentEvent(i)-(GlobalTimerEndOffset-1));
                     elseif CurrentEvent(i) < ConditionOffset
                         NewState = GlobalCounterMatrix(BpodSystem.Status.CurrentStateCode, CurrentEvent(i)-(GlobalCounterOffset-1));
                     elseif CurrentEvent(i) < JumpOffset
@@ -150,8 +164,15 @@ while BpodSystem.Status.InStateMatrix
                             % Set global timer end-time
                             ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.HW.Pos.GlobalTimerTrig);
                             if ThisGlobalTimer ~= 0
-                                BpodSystem.Emulator.GlobalTimerEnd(ThisGlobalTimer) = BpodSystem.Emulator.CurrentTime + BpodSystem.StateMatrix.GlobalTimers(ThisGlobalTimer);
-                                BpodSystem.Emulator.GlobalTimersActive(ThisGlobalTimer) = 1;
+                                if BpodSystem.StateMatrix.GlobalTimers.OnsetDelay(ThisGlobalTimer) == 0
+                                    BpodSystem.Emulator.GlobalTimerEnd(ThisGlobalTimer) = BpodSystem.Emulator.CurrentTime + BpodSystem.StateMatrix.GlobalTimers.Duration(ThisGlobalTimer);
+                                    BpodSystem.Emulator.GlobalTimersActive(ThisGlobalTimer) = 1;
+                                    BpodSystem.Emulator.GlobalTimersTriggered(ThisGlobalTimer) = 0;
+                                else 
+                                    BpodSystem.Emulator.GlobalTimerStart(ThisGlobalTimer) = BpodSystem.Emulator.CurrentTime + BpodSystem.StateMatrix.GlobalTimers.OnsetDelay(ThisGlobalTimer);
+                                    BpodSystem.Emulator.GlobalTimerEnd(ThisGlobalTimer) = BpodSystem.Emulator.GlobalTimerStart(ThisGlobalTimer) + BpodSystem.StateMatrix.GlobalTimers.Duration(ThisGlobalTimer);
+                                    BpodSystem.Emulator.GlobalTimersTriggered(ThisGlobalTimer) = 1;
+                                end
                             end
                             % Cancel global timers
                             ThisGlobalTimer = BpodSystem.StateMatrix.OutputMatrix(NewState,BpodSystem.HW.Pos.GlobalTimerCancel);
@@ -239,7 +260,9 @@ MilliOutput = round(DecimalInput*(1000))/(1000);
 function SetBpodHardwareMirror2CurrentState(CurrentState)
 global BpodSystem
 if CurrentState > 0
-    BpodSystem.HardwareState.OutputState = BpodSystem.StateMatrix.OutputMatrix(CurrentState,:);
+    NewOutputState = BpodSystem.StateMatrix.OutputMatrix(CurrentState,:);
+    OutputOverride = BpodSystem.HardwareState.OutputOverride;
+    BpodSystem.HardwareState.OutputState(~OutputOverride) = NewOutputState(~OutputOverride);
 else
     BpodSystem.HardwareState.InputState(1:end) = 0;
     BpodSystem.HardwareState.OutputState(1:end) = 0;
@@ -252,15 +275,34 @@ nEvents = sum(Events ~= 0);
 for i = 1:nEvents
     thisEvent = Events(i);
     if thisEvent ~= 255
-        if BpodSystem.HW.EventTypes(thisEvent) == 'I'
-            p = ((thisEvent-BpodSystem.HW.IOEventStartposition)/2)+BpodSystem.HW.n.SerialChannels+1;
-            thisChannel = floor(p);
-            isOdd = rem(p,1);
-            if isOdd == 0
-                BpodSystem.HardwareState.InputState(thisChannel) = 1;
-            else
-                BpodSystem.HardwareState.InputState(thisChannel) = 0;
-            end
+        switch BpodSystem.HW.EventTypes(thisEvent)
+            case 'I'
+                p = ((thisEvent-BpodSystem.HW.IOEventStartposition)/2)+BpodSystem.HW.n.SerialChannels+1;
+                thisChannel = floor(p);
+                isOdd = rem(p,1);
+                if isOdd == 0
+                    BpodSystem.HardwareState.InputState(thisChannel) = 1;
+                else
+                    BpodSystem.HardwareState.InputState(thisChannel) = 0;
+                end
+            case 'T'
+                timerEvent = thisEvent-BpodSystem.HW.GlobalTimerStartposition+1;
+                if timerEvent <= BpodSystem.HW.n.GlobalTimers 
+                    timerNumber = timerEvent;
+                    EventType = 1; % On
+                else
+                    timerNumber = timerEvent-BpodSystem.HW.n.GlobalTimers;
+                    EventType = 0; % Off
+                end
+                if BpodSystem.StateMatrix.GlobalTimers.OutputChannel(timerNumber) < 255
+                    outputChannel = BpodSystem.StateMatrix.GlobalTimers.OutputChannel(timerNumber);
+                    outputChannelType = BpodSystem.HW.Outputs(outputChannel);
+                    switch outputChannelType
+                        case {'B', 'W', 'P'}
+                            BpodSystem.HardwareState.OutputState(outputChannel) = EventType;
+                            BpodSystem.HardwareState.OutputOverride(outputChannel) = EventType;
+                    end
+                end
         end
     end
 end

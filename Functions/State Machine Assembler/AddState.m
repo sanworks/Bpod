@@ -61,9 +61,10 @@ sma.nStatesInManifest = sma.nStatesInManifest + 1;
 nInputColumns = sma.meta.InputMatrixSize;
 sma.InputMatrix(CurrentState,:) = ones(1,nInputColumns)*CurrentState;
 sma.OutputMatrix(CurrentState,:) = zeros(1,BpodSystem.StateMachineInfo.nOutputChannels);
-sma.GlobalTimerMatrix(CurrentState,:) = ones(1,5)*CurrentState;
-sma.GlobalCounterMatrix(CurrentState,:) = ones(1,5)*CurrentState;
-sma.ConditionMatrix(CurrentState,:) = ones(1,5)*CurrentState;
+sma.GlobalTimerStartMatrix(CurrentState,:) = ones(1,BpodSystem.HW.n.GlobalTimers)*CurrentState;
+sma.GlobalTimerEndMatrix(CurrentState,:) = ones(1,BpodSystem.HW.n.GlobalTimers)*CurrentState;
+sma.GlobalCounterMatrix(CurrentState,:) = ones(1,BpodSystem.HW.n.GlobalCounters)*CurrentState;
+sma.ConditionMatrix(CurrentState,:) = ones(1,BpodSystem.HW.n.Conditions)*CurrentState;
 sma.StateTimerMatrix(CurrentState) = CurrentState;
 sma.StateTimers(CurrentState) = StateTimer;
 sma.StatesDefined(CurrentState) = 1;
@@ -94,26 +95,36 @@ for x = 1:2:length(StateChangeConditions)
         if CandidateEventCode > nInputColumns
             CandidateEventName = StateChangeConditions{x};
             if length(CandidateEventName) > 4
-                if sum(lower(CandidateEventName(length(CandidateEventName)-3:length(CandidateEventName))) == '_end') == 4
-                    if CandidateEventCode < nInputColumns+6
-                        % This is a transition for a global timer. Add to global timer matrix.
-                        GlobalTimerNumber = str2double(CandidateEventName(length(CandidateEventName) - 4));
+                EventSuffix = lower(CandidateEventName(length(CandidateEventName)-3:length(CandidateEventName)));
+                switch EventSuffix
+                    case '_end'
+                        if CandidateEventCode < nInputColumns+(BpodSystem.HW.n.GlobalTimers*2)+1;
+                            % This is a transition for a global timer end. Add to global timer end matrix.
+                            GlobalTimerNumber = str2double(CandidateEventName(length(CandidateEventName) - 4));
+                            if ~isnan(GlobalTimerNumber)
+                                sma.GlobalTimerEndMatrix(CurrentState, GlobalTimerNumber) = TargetStateNumber;
+                            else
+                                EventSpellingErrorMessage(ThisStateName);
+                            end
+                        else
+                            % This is a transition for a global counter. Add to global counter matrix.
+                            GlobalCounterNumber = str2double(CandidateEventName(length(CandidateEventName) - 4));
+                            if ~isnan(GlobalCounterNumber)
+                                sma.GlobalCounterMatrix(CurrentState, GlobalCounterNumber) = TargetStateNumber;
+                            else
+                                EventSpellingErrorMessage(ThisStateName);
+                            end
+                        end
+                    case 'tart'
+                        % This is a transition for a global timer start. Add to global timer start matrix.
+                        GlobalTimerNumber = str2double(CandidateEventName(length(CandidateEventName) - 6));
                         if ~isnan(GlobalTimerNumber)
-                            sma.GlobalTimerMatrix(CurrentState, GlobalTimerNumber) = TargetStateNumber;
+                            sma.GlobalTimerStartMatrix(CurrentState, GlobalTimerNumber) = TargetStateNumber;
                         else
                             EventSpellingErrorMessage(ThisStateName);
                         end
-                    else
-                        % This is a transition for a global counter. Add to global counter matrix.
-                        GlobalCounterNumber = str2double(CandidateEventName(length(CandidateEventName) - 4));
-                        if ~isnan(GlobalCounterNumber)
-                            sma.GlobalCounterMatrix(CurrentState, GlobalCounterNumber) = TargetStateNumber;
-                        else
-                            EventSpellingErrorMessage(ThisStateName);
-                        end
-                    end
-                else
-                    % This is a transition for a condition. Add to condition matrix
+                    otherwise
+                        % This is a transition for a condition. Add to condition matrix
                     ConditionNumber = str2double(CandidateEventName(length(CandidateEventName)));
                     if ~isnan(ConditionNumber)
                         sma.ConditionMatrix(CurrentState, ConditionNumber) = TargetStateNumber;

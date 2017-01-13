@@ -1,6 +1,6 @@
 % Example state matrix: A condition (Port2, In) causes the second state to be skipped
 
-sma = NewStateMatrix();
+sma = NewStateMachine;
 sma = SetCondition(sma, 2, 'Port2', 1); %Arguments: (sma, ConditionNumber, ConditionChannel, ConditionValue; 1 = high/in, 0 = low/out)
 sma = AddState(sma, 'Name', 'Port1Light', ...
     'Timer', 1,...

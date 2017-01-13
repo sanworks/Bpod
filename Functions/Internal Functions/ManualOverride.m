@@ -77,6 +77,12 @@ switch TargetCode(1)
                     case 3
                         Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector3, 'String');
                         ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton3;
+                    case 4
+                        Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector4, 'String');
+                        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton4;
+                    case 5
+                        Databyte = get(BpodSystem.GUIHandles.HWSerialCodeSelector5, 'String');
+                        ButtonHandle = BpodSystem.GUIHandles.HWSerialTriggerButton5;
                 end
                 if sum(Databyte > 57) ~= length(Databyte)
                     Databyte = str2double(Databyte);

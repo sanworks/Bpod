@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Bpod repository
-Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
+Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -30,10 +30,11 @@ if sum(sma.StatesDefined == 0) > 0
     disp('Error: The state machine contains references to the following undefined states: ');
     UndefinedStates = find(sma.StatesDefined == 0);
     nUndefinedStates = length(UndefinedStates);
+    undefinedStateNames = cell(1,nUndefinedStates);
     for x = 1:nUndefinedStates
-        disp(sma.StateNames{UndefinedStates(x)});
+        undefinedStateNames{x} = [sma.StateNames{UndefinedStates(x)} ' '];
     end
-    error('Please define these states using the AddState function before sending.')
+    error(['Please define the following states using the AddState function before sending the state machine: ' cell2mat(undefinedStateNames)])
 end
 
 %% Check to make sure the state matrix does not exceed the maximum number of states
@@ -59,7 +60,8 @@ end
 sma.Manifest = sma.Manifest(1:sma.nStatesInManifest);
 StateOrder = zeros(1,sma.nStatesInManifest);
 OriginalInputMatrix = sma.InputMatrix;
-OriginalTimerMatrix = sma.GlobalTimerMatrix;
+OriginalTimerStartMatrix = sma.GlobalTimerStartMatrix;
+OriginalTimerEndMatrix = sma.GlobalTimerEndMatrix;
 OriginalCounterMatrix = sma.GlobalCounterMatrix;
 OriginalConditionMatrix = sma.ConditionMatrix;
 OriginalStateTimerMatrix = sma.StateTimerMatrix;
@@ -67,14 +69,16 @@ for i = 1:sma.nStatesInManifest
     StateOrder(i) = find(strcmp(sma.StateNames, sma.Manifest{i}));
     sma.InputMatrix(OriginalInputMatrix==StateOrder(i)) = i;
     sma.StateTimerMatrix(OriginalStateTimerMatrix==StateOrder(i)) = i;
-    sma.GlobalTimerMatrix(OriginalTimerMatrix==StateOrder(i)) = i;
+    sma.GlobalTimerStartMatrix(OriginalTimerStartMatrix==StateOrder(i)) = i;
+    sma.GlobalTimerEndMatrix(OriginalTimerEndMatrix==StateOrder(i)) = i;
     sma.GlobalCounterMatrix(OriginalCounterMatrix==StateOrder(i)) = i;
     sma.ConditionMatrix(OriginalConditionMatrix==StateOrder(i)) = i;
 end
 sma.InputMatrix = sma.InputMatrix(StateOrder,:);
 sma.OutputMatrix = sma.OutputMatrix(StateOrder,:);
 sma.StateTimerMatrix = sma.StateTimerMatrix(StateOrder);
-sma.GlobalTimerMatrix = sma.GlobalTimerMatrix(StateOrder,:);
+sma.GlobalTimerStartMatrix = sma.GlobalTimerStartMatrix(StateOrder,:);
+sma.GlobalTimerEndMatrix = sma.GlobalTimerEndMatrix(StateOrder,:);
 sma.GlobalCounterMatrix = sma.GlobalCounterMatrix(StateOrder,:);
 sma.ConditionMatrix = sma.ConditionMatrix(StateOrder,:);
 sma.StateNames = sma.StateNames(StateOrder);
@@ -84,7 +88,8 @@ sma.StateTimers = sma.StateTimers(StateOrder);
 ExitState = nStates+1;
 sma.InputMatrix(isnan(sma.InputMatrix)) = ExitState;
 sma.StateTimerMatrix(isnan(sma.StateTimerMatrix)) = ExitState;
-sma.GlobalTimerMatrix(isnan(sma.GlobalTimerMatrix)) = ExitState;
+sma.GlobalTimerStartMatrix(isnan(sma.GlobalTimerStartMatrix)) = ExitState;
+sma.GlobalTimerEndMatrix(isnan(sma.GlobalTimerEndMatrix)) = ExitState;
 sma.GlobalCounterMatrix(isnan(sma.GlobalCounterMatrix)) = ExitState;
 sma.ConditionMatrix(isnan(sma.ConditionMatrix)) = ExitState;
 
@@ -128,23 +133,41 @@ for i = 1:nStates
 end
 OutputMatrix = uint8(OutputMatrix);
 
-DifferenceMatrix = (sma.GlobalTimerMatrix ~= DefaultExtensionMatrix)';
+DifferenceMatrix = (sma.GlobalTimerStartMatrix ~= DefaultExtensionMatrix)';
 nDifferences = sum(DifferenceMatrix);
 msgLength = sum(nDifferences>0)*2 + nStates;
-GlobalTimerMatrix = zeros(1,msgLength); Pos = 1;
+GlobalTimerStartMatrix = zeros(1,msgLength); Pos = 1;
 for i = 1:nStates
     ThisState = DifferenceMatrix(:,i)';
-    GlobalTimerMatrix(Pos) = nDifferences(i); Pos = Pos + 1;
+    GlobalTimerStartMatrix(Pos) = nDifferences(i); Pos = Pos + 1;
     if nDifferences(i) > 0
         Positions = find(ThisState)-1;
-        Values = sma.GlobalTimerMatrix(i,ThisState)-1;
+        Values = sma.GlobalTimerStartMatrix(i,ThisState)-1;
         PosVal = [Positions; Values];
         PosVal = PosVal(1:end);
-        GlobalTimerMatrix(Pos:Pos+(nDifferences(i)*2)-1) = PosVal;
+        GlobalTimerStartMatrix(Pos:Pos+(nDifferences(i)*2)-1) = PosVal;
         Pos = Pos + nDifferences(i)*2;
     end
 end
-GlobalTimerMatrix = uint8(GlobalTimerMatrix);
+GlobalTimerStartMatrix = uint8(GlobalTimerStartMatrix);
+
+DifferenceMatrix = (sma.GlobalTimerEndMatrix ~= DefaultExtensionMatrix)';
+nDifferences = sum(DifferenceMatrix);
+msgLength = sum(nDifferences>0)*2 + nStates;
+GlobalTimerEndMatrix = zeros(1,msgLength); Pos = 1;
+for i = 1:nStates
+    ThisState = DifferenceMatrix(:,i)';
+    GlobalTimerEndMatrix(Pos) = nDifferences(i); Pos = Pos + 1;
+    if nDifferences(i) > 0
+        Positions = find(ThisState)-1;
+        Values = sma.GlobalTimerEndMatrix(i,ThisState)-1;
+        PosVal = [Positions; Values];
+        PosVal = PosVal(1:end);
+        GlobalTimerEndMatrix(Pos:Pos+(nDifferences(i)*2)-1) = PosVal;
+        Pos = Pos + nDifferences(i)*2;
+    end
+end
+GlobalTimerEndMatrix = uint8(GlobalTimerEndMatrix);
 
 DifferenceMatrix = (sma.GlobalCounterMatrix ~= DefaultExtensionMatrix)';
 nDifferences = sum(DifferenceMatrix);
@@ -184,31 +207,36 @@ ConditionMatrix = uint8(ConditionMatrix);
 StateTimerMatrix = uint8(sma.StateTimerMatrix-1);
 ConditionChannels = uint8(sma.ConditionChannels-1);
 ConditionValues = uint8(sma.ConditionValues);
+GlobalTimerChannels = uint8(sma.GlobalTimers.OutputChannel-1);
+GlobalTimerOnMessages = sma.GlobalTimers.OnMessage;
+GlobalTimerOnMessages(GlobalTimerOnMessages==0) = 255;
+GlobalTimerOnMessages = uint8(GlobalTimerOnMessages);
+GlobalTimerOffMessages = sma.GlobalTimers.OffMessage;
+GlobalTimerOffMessages(GlobalTimerOffMessages==0) = 255;
+GlobalTimerOffMessages = uint8(GlobalTimerOffMessages);
 GlobalCounterAttachedEvents = uint8(sma.GlobalCounterEvents-1);
 GlobalCounterThresholds = uint32(sma.GlobalCounterThresholds);
 
 %% Format timers (doubles in seconds) into 32 bit int vectors
 StateTimers = uint32(sma.StateTimers*BpodSystem.HW.CycleFrequency);
-GlobalTimers = uint32(sma.GlobalTimers*BpodSystem.HW.CycleFrequency);
-
+GlobalTimers = uint32(sma.GlobalTimers.Duration*BpodSystem.HW.CycleFrequency);
+GlobalTimerDelays = uint32(sma.GlobalTimers.OnsetDelay*BpodSystem.HW.CycleFrequency);
 %% Add input channel configuration
 %InputChannelConfig = [BpodSystem.InputsEnabled.PortsEnabled];
 
 %% Create vectors of 8-bit and 32-bit data
 
-EightBitMatrix = ['C' nStates StateTimerMatrix InputMatrix OutputMatrix GlobalTimerMatrix GlobalCounterMatrix ConditionMatrix GlobalCounterAttachedEvents ConditionChannels ConditionValues];
-ThirtyTwoBitMatrix = [StateTimers GlobalTimers GlobalCounterThresholds];
+EightBitMatrix = ['C' nStates StateTimerMatrix InputMatrix OutputMatrix GlobalTimerStartMatrix GlobalTimerEndMatrix GlobalCounterMatrix ConditionMatrix GlobalTimerChannels GlobalTimerOnMessages GlobalTimerOffMessages GlobalCounterAttachedEvents ConditionChannels ConditionValues];
+ThirtyTwoBitMatrix = [StateTimers GlobalTimers GlobalTimerDelays GlobalCounterThresholds];
 
 if BpodSystem.EmulatorMode == 0
     %% Send state matrix to Bpod device
     ByteString = [EightBitMatrix typecast(ThirtyTwoBitMatrix, 'uint8')];
     BpodSystem.SerialPort.write(ByteString, 'uint8');
     
-    %% Recieve Acknowledgement
-    Confirmed = BpodSystem.SerialPort.read(1, 'uint8'); % Confirm that it has been received
-    if isempty(Confirmed)
-        Confirmed = 0;
-    end
+%% Confirm send. Note: To reduce dead time, transmission is confirmed from state machine after next call to RunStateMachine()
+    BpodSystem.Status.NewStateMachineSent = 1; % On next run, a byte is returned confirming that the state machine was received.
+    Confirmed = 1;
 else
     Confirmed = 1;
 end

@@ -31,8 +31,13 @@ class stateMachine(object):
         self.inputMatrix = [[] for i in range(bpodObject.stateMachineInfo.maxStates)]
         self.outputMatrix = [[] for i in range(bpodObject.stateMachineInfo.maxStates)]
         self.globalTimers = Struct()
-        self.globalTimers.matrix = [[] for i in range(bpodObject.stateMachineInfo.maxStates)]
+        self.globalTimers.startMatrix = [[] for i in range(bpodObject.stateMachineInfo.maxStates)]
+        self.globalTimers.endMatrix = [[] for i in range(bpodObject.stateMachineInfo.maxStates)]
         self.globalTimers.timers = [0]*bpodObject.HW.n.GlobalTimers
+        self.globalTimers.onsetDelays = [0]*bpodObject.HW.n.GlobalTimers
+        self.globalTimers.channels = [0]*bpodObject.HW.n.GlobalTimers
+        self.globalTimers.onMessages = [0]*bpodObject.HW.n.GlobalTimers
+        self.globalTimers.offMessages = [0]*bpodObject.HW.n.GlobalTimers
         self.globalCounters = Struct()
         self.globalCounters.attachedEvents = [254]*bpodObject.HW.n.GlobalCounters
         self.globalCounters.thresholds = [0]*bpodObject.HW.n.GlobalCounters
@@ -83,8 +88,10 @@ class stateMachine(object):
                         self.conditions.matrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
                     elif thisEventCode >= self.stateMachineInfo.Pos.globalCounter:
                         self.globalCounters.matrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
-                    elif thisEventCode >= self.stateMachineInfo.Pos.globalTimer:
-                        self.globalTimers.matrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
+                    elif thisEventCode >= self.stateMachineInfo.Pos.globalTimerEnd:
+                        self.globalTimers.endMatrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
+                    elif thisEventCode >= self.stateMachineInfo.Pos.globalTimerStart:
+                        self.globalTimers.startMatrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
                     else:
                         self.inputMatrix[thisStateNumber].append((thisEventCode,destinationStateNumber))
             elif thisArg == 'outputactions':
@@ -113,8 +120,42 @@ class stateMachine(object):
             else:
                 raise SMAError('Error: valid state machine arguments are: Name, Timer, StateChangeConditions, OutputActions.')
         self.nStates += 1
-    def setGlobalTimer(self, timerNumber, timerDuration):
+    def setGlobalTimerLegacy(self, timerNumber, timerDuration):
         self.globalTimers.timers[timerNumber-1] = timerDuration
+    def setGlobalTimer(self, *args):
+        nargs = len(args)
+        timerID = 0
+        timerDuration = 0
+        onsetDelay = 0
+        timerChannel = 255
+        onMessage = 1
+        offMessage = 0
+        for i in range(0,nargs,2):
+            thisArg = args[i].lower()
+            thisArgValue = args[i+1]
+            if thisArg == 'timerid':
+                timerID = thisArgValue
+            elif thisArg == 'duration':
+                timerDuration = thisArgValue
+            elif thisArg == 'onsetdelay':
+                onsetDelay = thisArgValue
+            elif thisArg == 'channel':
+                try:
+                    timerChannel = self.outputChannelNames.index(thisArgValue)
+                except:
+                    raise SMAError('Error: ' + thisArgValue + ' is an invalid output channel name.')
+            elif thisArg == 'onmessage':
+                onMessage = thisArgValue
+            elif thisArg == 'offmessage':
+                offMessage = thisArgValue
+            else:
+                raise SMAError('Error: valid global timer arguments are: TimerID, Duration, OnsetDelay, Channel, ChannelValueOn, ChannelValueOff.')
+        self.globalTimers.timers[timerID-1] = timerDuration
+        self.globalTimers.onsetDelays[timerID-1] = onsetDelay
+        self.globalTimers.channels[timerID-1] = timerChannel
+        self.globalTimers.onMessages[timerID-1] = onMessage
+        self.globalTimers.offMessages[timerID-1] = offMessage
+
     def setGlobalCounter(self, counterNumber, counterEvent, threshold):
         eventCode = self.eventNames.index(counterEvent)
         self.globalCounters.attachedEvents[counterNumber-1] = eventCode

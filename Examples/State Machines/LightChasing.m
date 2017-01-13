@@ -1,6 +1,6 @@
 % Example state matrix: light chasing.
 
-sma = NewStateMatrix();
+sma = NewStateMachine;
                 
 sma = AddState(sma, 'Name', 'Port1Active1', ...
     'Timer', 0,...

@@ -2,7 +2,7 @@
 ----------------------------------------------------------------------------
 
 This file is part of the Sanworks Bpod repository
-Copyright (C) 2016 Sanworks LLC, Sound Beach, New York, USA
+Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
 
 ----------------------------------------------------------------------------
 
@@ -48,6 +48,7 @@ classdef BpodObject < handle
         BonsaiSocket % An object containing a TCP/IP socket for communication with Bonsai
         EmulatorMode % 0 if actual device connected, 1 if emulator
         HostOS % Holds a string naming the host operating system (i.e. 'Microsoft Windows XP')
+        MachineType % 1 = Arduino Due / Bpod 0.5, 0.7. 2 = Pocket State Machine
     end
     properties (Access = private)
         ProtocolSelectorLastValue % Last protocol selected in UI
@@ -115,6 +116,7 @@ classdef BpodObject < handle
             obj.Status.BpodStartTime = 0;
             obj.Status.CurrentProtocolName = '';
             obj.Status.SerialPortName = '';
+            obj.Status.NewStateMachineSent = 0;
             obj.Path = struct;
             obj.Path.BpodRoot = BpodPath;
             obj.Path.ParentDir = fullfile(BpodPath(1:end-4));
@@ -250,14 +252,16 @@ classdef BpodObject < handle
                 obj.HW.n.Inputs = 16;
                 obj.HW.Inputs = 'UUUXBBWWPPPPPPPP';
                 obj.HW.n.Outputs = 18;
-                obj.HW.Outputs = 'UUUXSBBWWWPPPPPPPP';
+                obj.HW.Outputs = 'UUUXSBBWWWPPPPPPPPGGG';
                 close(obj.GUIHandles.LaunchEmuFig);
                 disp('Connection aborted. Bpod started in Emulator mode.')
                 obj.FirmwareBuild = 9;
+                obj.MachineType = 1;
             else
                 % Get firmware version
                 obj.SerialPort.write('F', 'uint8');
-                obj.FirmwareBuild = obj.SerialPort.read(1, 'uint32');
+                obj.FirmwareBuild = obj.SerialPort.read(1, 'uint16');
+                obj.MachineType = obj.SerialPort.read(1, 'uint16');
                 obsoleteFirmware = [7 8];
                 if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
                     error('Old firmware detected. Please update Bpod firmware, restart MATLAB and try again.')
@@ -268,22 +272,26 @@ classdef BpodObject < handle
                 obj.StateMachineInfo.MaxStates = obj.SerialPort.read(1, 'uint16');
                 obj.HW.CyclePeriod = double(obj.SerialPort.read(1, 'uint16'));
                 obj.HW.CycleFrequency = 1000000/double(obj.HW.CyclePeriod);
-                obj.HW.n.EventsPerSerialChannel = obj.SerialPort.read(1, 'uint8');
-                obj.HW.n.GlobalTimers = obj.SerialPort.read(1, 'uint8');
-                obj.HW.n.GlobalCounters  = obj.SerialPort.read(1, 'uint8');
-                obj.HW.n.Conditions  = obj.SerialPort.read(1, 'uint8');
-                obj.HW.n.Inputs = obj.SerialPort.read(1, 'uint8');
+                obj.HW.n.EventsPerSerialChannel = double(obj.SerialPort.read(1, 'uint8'));
+                obj.HW.n.GlobalTimers = double(obj.SerialPort.read(1, 'uint8'));
+                obj.HW.n.GlobalCounters  = double(obj.SerialPort.read(1, 'uint8'));
+                obj.HW.n.Conditions  = double(obj.SerialPort.read(1, 'uint8'));
+                obj.HW.n.Inputs = double(obj.SerialPort.read(1, 'uint8'));
                 obj.HW.Inputs = char(obj.SerialPort.read(obj.HW.n.Inputs, 'uint8'));
-                obj.HW.n.Outputs = obj.SerialPort.read(1, 'uint8');
+                obj.HW.n.Outputs = double(obj.SerialPort.read(1, 'uint8'));
                 obj.HW.Outputs = [char(obj.SerialPort.read(obj.HW.n.Outputs, 'uint8')) 'GGG']; % G = Global timer / counter
                 % Enable ports
                 if length(obj.InputsEnabled) ~= obj.HW.n.Inputs
                     obj.InputsEnabled = zeros(1,obj.HW.n.Inputs);
                     PortPos = find(obj.HW.Inputs == 'P');
-                    obj.InputsEnabled(PortPos(1:3)) = 1;
+                    if ~isempty(PortPos)
+                        obj.InputsEnabled(PortPos(1:3)) = 1;
+                    end
                     obj.InputsEnabled(obj.HW.Inputs == 'B') = 1;
-                    if obj.FirmwareBuild > 6 % Later versions use optoisolator for wire inputs - OK to activate
-                        obj.InputsEnabled(obj.HW.Inputs == 'W') = 1;
+                    if obj.MachineType == 1
+                        if obj.FirmwareBuild > 6 % Later versions use optoisolator for wire inputs - OK to activate
+                            obj.InputsEnabled(obj.HW.Inputs == 'W') = 1;
+                        end
                     end
                 end
                 obj.SerialPort.write(['E' obj.InputsEnabled], 'uint8');
@@ -308,17 +316,20 @@ classdef BpodObject < handle
             obj.HW.n.UartSerialChannels = sum(obj.HW.Outputs == 'U');
             obj.HW.n.USBChannels = sum(obj.HW.Outputs == 'X');
             obj.HW.n.SerialChannels = obj.HW.n.USBChannels + obj.HW.n.UartSerialChannels;
-            obj.HW.EventTypes = [repmat('S', 1, obj.HW.n.SerialChannels*obj.HW.n.EventsPerSerialChannel) repmat('I', 1, obj.HW.n.DigitalInputs*2) repmat('T', 1, obj.HW.n.GlobalTimers ) repmat('+', 1, obj.HW.n.GlobalCounters)  repmat('C', 1, obj.HW.n.Conditions) repmat('J', 1, obj.HW.n.SerialChannels) 'U'];
+            obj.HW.EventTypes = [repmat('S', 1, obj.HW.n.SerialChannels*obj.HW.n.EventsPerSerialChannel) repmat('I', 1, obj.HW.n.DigitalInputs*2) repmat('T', 1, obj.HW.n.GlobalTimers*2 ) repmat('+', 1, obj.HW.n.GlobalCounters)  repmat('C', 1, obj.HW.n.Conditions) repmat('J', 1, obj.HW.n.SerialChannels) 'U'];
             obj.HW.EventKey = 'S = serial, I = i/o, T = global timer, + = global counter, C = condition, J = jump, U = state timer';
             obj.HW.IOEventStartposition = find(obj.HW.EventTypes == 'I', 1);
+            obj.HW.GlobalTimerStartposition = find(obj.HW.EventTypes == 'T', 1);
+            obj.HW.GlobalCounterStartposition = find(obj.HW.EventTypes == '+', 1);
+            obj.HW.ConditionStartposition = find(obj.HW.EventTypes == 'C', 1);
             obj.HW.StateTimerPosition = find(obj.HW.EventTypes == 'U');
-            obj.HW.Pos = struct; % Positions of different channel types in hardware description vectors
-            
+            obj.HW.Pos = struct; % Positions of different channel types in hardware description vectors 
             obj.HardwareState.Key = 'D = digital B/W = BNC/Wire (digital), P = Port (digital in, PWM out), S = SPI, U = UART, X = USB';
             obj.HardwareState.InputState = zeros(1,obj.HW.n.Inputs);
             obj.HardwareState.InputType = obj.HW.Inputs;
             obj.HardwareState.OutputState = zeros(1,obj.HW.n.Outputs+3);
             obj.HardwareState.OutputType = obj.HW.Outputs;
+            obj.HardwareState.OutputOverride = zeros(1,obj.HW.n.Outputs+3);
             obj.LastHardwareState = obj.HardwareState;
             % Find positions of input channel groups
             obj.HW.Pos.Input_BNC = find(obj.HW.Inputs == 'B', 1);
@@ -377,6 +388,9 @@ classdef BpodObject < handle
                         EventNames{Pos} = [InputChannelNames{nChannels} 'High']; Pos = Pos + 1;
                         EventNames{Pos} = [InputChannelNames{nChannels} 'Low']; Pos = Pos + 1;
                 end
+            end
+            for i = 1:obj.HW.n.GlobalTimers
+                EventNames{Pos} = ['GlobalTimer' num2str(i) '_Start']; Pos = Pos + 1;
             end
             for i = 1:obj.HW.n.GlobalTimers
                 EventNames{Pos} = ['GlobalTimer' num2str(i) '_End']; Pos = Pos + 1;
@@ -457,14 +471,21 @@ classdef BpodObject < handle
             sma.nStatesInManifest = 0;
             sma.Manifest = cell(1,obj.StateMachineInfo.MaxStates); % State names in the order they were added by user
             sma.StateNames = {'Placeholder'}; % State names in the order they were referenced
-            sma.meta.InputMatrixSize = obj.StateMachineInfo.nEvents-(15+obj.HW.n.SerialChannels+1); % Subtract Global timers/counters/conditions, jump states and tup
+            nExtraEvents = obj.HW.n.GlobalTimers*2 + obj.HW.n.GlobalCounters + obj.HW.n.Conditions;
+            sma.meta.InputMatrixSize = obj.StateMachineInfo.nEvents-(nExtraEvents+obj.HW.n.SerialChannels+1); % Subtract Global timers/counters/conditions, jump states and tup
             sma.InputMatrix = ones(1,sma.meta.InputMatrixSize);
             sma.meta.OutputMatrixSize = obj.StateMachineInfo.nOutputChannels;
             sma.OutputMatrix = zeros(1,sma.meta.OutputMatrixSize);
             sma.StateTimerMatrix = zeros(1,1);
-            sma.GlobalTimerMatrix = ones(1,obj.HW.n.GlobalTimers);
-            sma.GlobalTimers = zeros(1,obj.HW.n.GlobalTimers);
-            sma.GlobalTimerSet = zeros(1,obj.HW.n.GlobalTimers); % Changed to 1 when the timer is given a duration with SetGlobalTimer
+            sma.GlobalTimerStartMatrix = ones(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimerEndMatrix = ones(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimers = struct;
+            sma.GlobalTimers.Duration = zeros(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimers.OnsetDelay = zeros(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimers.OutputChannel = ones(1,obj.HW.n.GlobalTimers)*255; % Default channel code of 255 is "no channel".
+            sma.GlobalTimers.OnMessage = zeros(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimers.OffMessage = zeros(1,obj.HW.n.GlobalTimers);
+            sma.GlobalTimers.IsSet = zeros(1,obj.HW.n.GlobalTimers); % Changed to 1 when the timer is set with SetGlobalTimer
             sma.GlobalCounterMatrix = ones(1,obj.HW.n.GlobalCounters);
             sma.GlobalCounterEvents = ones(1,obj.HW.n.GlobalCounters)*255; % Default event of 255 is code for "no event attached".
             sma.GlobalCounterThresholds = zeros(1,obj.HW.n.GlobalCounters);
@@ -514,49 +535,67 @@ classdef BpodObject < handle
             obj.GUIHandles.SettingsButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [750 275 29 29], 'Callback', 'BpodSettingsMenu', 'CData', obj.GUIData.SettingsButton, 'TooltipString', 'Settings and calibration');
             obj.GUIHandles.DocButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [700 275 29 29], 'Callback', @(h,e)obj.Wiki(), 'CData', obj.GUIData.DocButton, 'TooltipString', 'Documentation wiki');
             ypos = 188;
-            for i = 1:obj.HW.n.Ports
-                obj.GUIHandles.PortValveButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 260 30 30], 'Callback', ['ManualOverride(''OS'',1,' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Toggle port ' num2str(i) ' valve']);
-                obj.GUIHandles.PortLEDButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 220 30 30], 'Callback', ['ManualOverride(''OP'',' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Toggle port ' num2str(i) ' LED']);
-                obj.GUIHandles.PortvPokeButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 180 30 30], 'Callback', ['ManualOverride(''IP'',' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Port ' num2str(i) ' virtual photogate']);
-                ypos = ypos + 41;
+            if obj.MachineType == 1
+                for i = 1:obj.HW.n.Ports
+                    obj.GUIHandles.PortValveButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 260 30 30], 'Callback', ['ManualOverride(''OS'',1,' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Toggle port ' num2str(i) ' valve']);
+                    obj.GUIHandles.PortLEDButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 220 30 30], 'Callback', ['ManualOverride(''OP'',' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Toggle port ' num2str(i) ' LED']);
+                    obj.GUIHandles.PortvPokeButton(i) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [ypos 180 30 30], 'Callback', ['ManualOverride(''IP'',' num2str(i) ');'], 'CData', obj.GUIData.OffButtonDark, 'TooltipString', ['Port ' num2str(i) ' virtual photogate']);
+                    ypos = ypos + 41;
+                end
             end
-            
             obj.GUIHandles.BNCInputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [525 243 30 30], 'Callback', 'ManualOverride(''IB'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof BNC Input 1');
             obj.GUIHandles.BNCInputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [565 243 30 30], 'Callback', 'ManualOverride(''IB'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof BNC Input 2');
             
             obj.GUIHandles.BNCOutputButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [605 243 30 30], 'Callback', 'ManualOverride(''OB'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: BNC Output 1');
             obj.GUIHandles.BNCOutputButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [645 243 30 30], 'Callback', 'ManualOverride(''OB'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL:BNC Output 2');
-            
-            obj.GUIHandles.InputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 77 30 30], 'Callback', 'ManualOverride(''IW'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-            obj.GUIHandles.InputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 77 30 30], 'Callback', 'ManualOverride(''IW'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-            if obj.FirmwareBuild < 8
-                obj.GUIHandles.InputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 77 30 30], 'Callback', 'ManualOverride(''IW'',3);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
-                obj.GUIHandles.InputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 77 30 30], 'Callback', 'ManualOverride(''IW'',4);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+            if obj.MachineType == 1
+                obj.GUIHandles.InputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 77 30 30], 'Callback', 'ManualOverride(''IW'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+                obj.GUIHandles.InputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 77 30 30], 'Callback', 'ManualOverride(''IW'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+                if obj.FirmwareBuild < 8
+                    obj.GUIHandles.InputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 77 30 30], 'Callback', 'ManualOverride(''IW'',3);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+                    obj.GUIHandles.InputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 77 30 30], 'Callback', 'ManualOverride(''IW'',4);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Spoof input wire 1');
+                end
+                obj.GUIHandles.OutputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 36 30 30], 'Callback', 'ManualOverride(''OW'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
+                obj.GUIHandles.OutputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 36 30 30], 'Callback', 'ManualOverride(''OW'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
+                obj.GUIHandles.OutputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 36 30 30], 'Callback', 'ManualOverride(''OW'',3);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
+                if obj.FirmwareBuild < 8
+                    obj.GUIHandles.OutputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 36 30 30], 'Callback', 'ManualOverride(''OW'',4);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
+                end
             end
-            
-            obj.GUIHandles.OutputWireButton(1) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [188 36 30 30], 'Callback', 'ManualOverride(''OW'',1);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-            obj.GUIHandles.OutputWireButton(2) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [231 36 30 30], 'Callback', 'ManualOverride(''OW'',2);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-            obj.GUIHandles.OutputWireButton(3) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [272 36 30 30], 'Callback', 'ManualOverride(''OW'',3);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-            if obj.FirmwareBuild < 8
-                obj.GUIHandles.OutputWireButton(4) = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [313 36 30 30], 'Callback', 'ManualOverride(''OW'',4);', 'CData', obj.GUIData.OffButtonDark, 'TooltipString', 'Toggle TTL: output wire 1');
-            end
-            if obj.FirmwareBuild < 8
-                obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [363 32 40 40], 'Callback', 'ManualOverride(''OX'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
-                obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [414 32 40 40], 'Callback', 'ManualOverride(''OU'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
-                obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(''OU'',2);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
-                obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [363 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-                obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [414 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-                obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [465 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-                
+            if obj.MachineType == 1
+                if obj.FirmwareBuild < 8
+                    obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [363 32 40 40], 'Callback', 'ManualOverride(''OX'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send soft event code byte');
+                    obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [414 32 40 40], 'Callback', 'ManualOverride(''OU'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
+                    obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [465 32 40 40], 'Callback', 'ManualOverride(''OU'',2);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
+                    obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [363 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                    obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [414 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                    obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [465 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+
+                else
+                    obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [320 32 40 40], 'Callback', 'ManualOverride(''OX'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to MATLAB soft code handler function');
+                    obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [370 32 40 40], 'Callback', 'ManualOverride(''OU'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
+                    obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [420 32 40 40], 'Callback', 'ManualOverride(''OU'',2);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
+                    obj.GUIHandles.HWSerialTriggerButton3 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [470 32 40 40], 'Callback', 'ManualOverride(''OU'',3);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 3');
+                    obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [320 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
+                    obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [370 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                    obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [420 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                    obj.GUIHandles.HWSerialCodeSelector3 = uicontrol('Style', 'edit', 'String', '0', 'Position', [470 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                end
             else
-                obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [320 32 40 40], 'Callback', 'ManualOverride(''OX'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to MATLAB soft code handler function');
-                obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [370 32 40 40], 'Callback', 'ManualOverride(''OU'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1');
-                obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [420 32 40 40], 'Callback', 'ManualOverride(''OU'',2);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2');
-                obj.GUIHandles.HWSerialTriggerButton3 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [470 32 40 40], 'Callback', 'ManualOverride(''OU'',3);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 3');
-                obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [320 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)');
-                obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [370 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
-                obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [420 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
-                obj.GUIHandles.HWSerialCodeSelector3 = uicontrol('Style', 'edit', 'String', '0', 'Position', [470 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)');
+                    Pos = 150;
+                    obj.GUIHandles.SoftTriggerButton = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OX'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to MATLAB soft code handler function'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialTriggerButton1 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OU'',1);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 1'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialTriggerButton2 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OU'',2);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 2'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialTriggerButton3 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OU'',3);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 3'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialTriggerButton4 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OU'',4);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 4'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialTriggerButton5 = uicontrol('Style', 'pushbutton', 'String', '', 'Position', [Pos 32 40 40], 'Callback', 'ManualOverride(''OU'',5);', 'CData', obj.GUIData.SoftTriggerButton, 'TooltipString', 'Send byte to hardware serial port 5'); Pos = Pos + 50;
+                    Pos = 150;
+                    obj.GUIHandles.SoftCodeSelector = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255; 0=no op)'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialCodeSelector1 = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialCodeSelector2 = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialCodeSelector3 = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialCodeSelector4 = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)'); Pos = Pos + 50;
+                    obj.GUIHandles.HWSerialCodeSelector5 = uicontrol('Style', 'edit', 'String', '0', 'Position', [Pos 80 40 25], 'FontWeight', 'bold', 'FontSize', 12, 'BackgroundColor', [.8 .8 .8], 'TooltipString', 'Enter byte code here (0-255;)'); Pos = Pos + 50;
             end
             obj.GUIHandles.CurrentStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 268 115 20], 'FontWeight', 'bold', 'FontSize', 9);
             obj.GUIHandles.PreviousStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 219 115 20], 'FontWeight', 'bold', 'FontSize', 9);
@@ -608,7 +647,11 @@ classdef BpodObject < handle
             end
             text(15, 30, Title, 'FontName', TitleFontName, 'FontSize', Lg, 'Color', TitleColor);
             line([280 770], [30 30], 'Color', LabelFontColor, 'LineWidth', 4);
-            text(620, 380,['r0.' ver ' beta'], 'FontName', TitleFontName, 'FontSize', Lg, 'Color', LabelFontColor);
+            if obj.MachineType == 1
+                text(620, 380,['r0.' ver ' beta'], 'FontName', TitleFontName, 'FontSize', Lg, 'Color', LabelFontColor);
+            else
+                text(620, 380,['pocket sm'], 'FontName', TitleFontName, 'FontSize', Lg, 'Color', LabelFontColor);
+            end
             line([10 610], [380 380], 'Color', LabelFontColor, 'LineWidth', 4);
             text(10, 102,'Current State', 'FontName', FontName, 'FontSize', Vsm, 'Color', LabelFontColor);
             text(10, 153,'Previous State', 'FontName', FontName, 'FontSize', Vsm, 'Color', LabelFontColor);
@@ -617,8 +660,10 @@ classdef BpodObject < handle
             text(10, 306,'Link Status', 'FontName', FontName, 'FontSize', Vsm, 'Color', LabelFontColor);
             text(40, 65,'Info', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             line([10 130], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
-            text(269, 65,'Port Override', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-            line([170 505], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            if obj.MachineType == 1
+                text(269, 65,'Port Override', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                line([170 505], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
+            end
             text(525, 65,'BNC Override', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             line([525 675], [80 80], 'Color', LabelFontColor, 'LineWidth', 2);
             text(690, 65,'Settings', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
@@ -626,9 +671,11 @@ classdef BpodObject < handle
             text(520, 180,'Protocol Select', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             line([520 705], [195 195], 'Color', LabelFontColor, 'LineWidth', 2);
             Pos = 198;
-            for x = 1:8
-                text(Pos, 100,num2str(x), 'FontName', FontName, 'FontSize', Sm, 'Color', LabelFontColor);
-                Pos = Pos + 41;
+            if obj.MachineType == 1
+                for x = 1:8
+                    text(Pos, 100,num2str(x), 'FontName', FontName, 'FontSize', Sm, 'Color', LabelFontColor);
+                    Pos = Pos + 41;
+                end
             end
             Pos = 533;
             for x = 1:2
@@ -646,39 +693,62 @@ classdef BpodObject < handle
             else
                 nWireChannels = 3;
             end
-            for x = 1:nWireChannels
-                text(Pos, 280,num2str(x), 'FontName', FontName, 'FontSize', Sm, 'Color', LabelFontColor);
-                Pos = Pos + 41;
+            if obj.MachineType == 1
+                for x = 1:nWireChannels
+                    text(Pos, 280,num2str(x), 'FontName', FontName, 'FontSize', Sm, 'Color', LabelFontColor);
+                    Pos = Pos + 41;
+                end
             end
-            if obj.FirmwareBuild < 8
-                text(170, 250,'Wire Override', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-                line([170 350], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
-                text(375, 250,'Serial Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-                line([360 510], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+            if obj.MachineType == 1
+                if obj.FirmwareBuild < 8
+                    text(170, 250,'Wire Override', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                    line([170 350], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                    text(375, 250,'Serial Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                    line([360 510], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                else
+                    T = text(190, 250,'Wire I/O', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                    line([170 305], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                    text(350, 250,'Serial Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                    line([320 510], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                end
             else
-                T = text(190, 250,'Wire I/O', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-                line([170 305], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
-                text(350, 250,'Serial Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-                line([320 510], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
+                text(150, 250,'Serial Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                line([150 450], [265 265], 'Color', LabelFontColor, 'LineWidth', 2);
             end
+            if obj.MachineType == 1
+                text(145, 125,'H2O', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                text(145, 165,'LED', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+                text(145, 205,'IR', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             
-            text(145, 125,'H2O', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-            text(145, 165,'LED', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-            text(145, 205,'IR', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             text(145, 310,'In', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             text(145, 350,'Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
+            end
             text(547, 95,'In', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
             text(620, 95,'Out', 'FontName', FontName, 'FontSize', Med, 'Color', LabelFontColor);
-            if obj.FirmwareBuild > 7
-                Pos = 322;
+            if obj.MachineType == 1
+                if obj.FirmwareBuild > 7
+                    Pos = 322;
+                else
+                    Pos = 365;
+                end
             else
-                Pos = 365;
+                Pos = 236;
             end
+            if obj.MachineType == 1
             text(Pos, 280,'USB', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
             text(Pos, 280,'HW1', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
             text(Pos, 280,'HW2', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
-            if obj.FirmwareBuild > 7
-                text(Pos, 280,'HW3', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+                if obj.FirmwareBuild > 7
+                    text(Pos, 280,'HW3', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor);
+                end
+            else
+                Pos = 150;
+                text(Pos, 280,'USB', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
+                text(Pos, 280,'HW1', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
+                text(Pos, 280,'HW2', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
+                text(Pos, 280,'HW3', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
+                text(Pos, 280,'HW4', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
+                text(Pos, 280,'HW5', 'FontName', FontName, 'FontSize', 13, 'Color', LabelFontColor); Pos = Pos + 50;
             end
             set(ha,'handlevisibility','off','visible','off');
             set(obj.GUIHandles.MainFig,'handlevisibility','off');
@@ -958,6 +1028,8 @@ classdef BpodObject < handle
         function ArduinoPorts = FindArduinoPorts(obj)
             if ispc
                 [Status RawString] = system('wmic path Win32_SerialPort Where "Caption LIKE ''%Arduino%''" Get DeviceID'); % Search for Arduino on USB Serial
+                [Status RawString2] = system('wmic path Win32_SerialPort Where "Caption LIKE ''%Teensy%''" Get DeviceID'); % Search for Teensy on USB Serial
+                RawString = [RawString RawString2];
                 PortLocations = strfind(RawString, 'COM');
                 ArduinoPorts = cell(1,100);
                 nPorts = length(PortLocations);

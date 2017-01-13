@@ -1,7 +1,7 @@
 % Example state matrix: Switches states when byte 0x3 arrives on serial
 % port 1
 
-sma = NewStateMatrix();
+sma = NewStateMachine;
 
 sma = AddState(sma, 'Name', 'Port1LightOn', ...
     'Timer', 1,...

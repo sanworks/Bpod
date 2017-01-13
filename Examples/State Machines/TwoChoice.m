@@ -1,4 +1,4 @@
-% Example state matrix: Choose between two ports
+% Example state machine: Choose between two ports
 
 sma = NewStateMatrix();
 

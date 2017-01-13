@@ -117,7 +117,7 @@ classdef ArCOMObject_Bpod < handle
                         portString = ['\\.\' portString];
                     end
                     IOPort('Verbosity', 0);
-                    obj.Port = IOPort('OpenSerialPort', portString, 'BaudRate=115200, OutputBufferSize=100000, InputBufferSize=100000, DTR=1');
+                    obj.Port = IOPort('OpenSerialPort', portString, 'BaudRate=115200, OutputBufferSize=1000000, InputBufferSize=1000000, DTR=1');
                     if (obj.Port < 0)
                         try
                             IOPort('Close', obj.Port);

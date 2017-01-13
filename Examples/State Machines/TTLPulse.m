@@ -2,7 +2,7 @@
 
 PulseDuration = .001;
 
-sma = NewStateMatrix();
+sma = NewStateMachine;
 
 sma = AddState(sma, 'Name', 'Pulse', ...
     'Timer', PulseDuration,...

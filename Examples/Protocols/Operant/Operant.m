@@ -67,7 +67,6 @@ for currentTrial = 1:MaxTrials
             StateOnLeftPoke1 = 'WaitForPokeOut1'; StateOnRightPoke1 = 'WaitForPokeOut1';
             StateOnLeftPoke2 = 'WaitForPokeOut2'; StateOnRightPoke2 = 'WaitForPokeOut2';  
     end
-
     sma = NewStateMatrix(); % Assemble state matrix
     sma = AddState(sma, 'Name', 'WaitForPoke1', ...
         'Timer', 0,...
@@ -113,7 +112,6 @@ for currentTrial = 1:MaxTrials
         'Timer', S.GUI.PortOutRegDelay,...
         'StateChangeConditions', {'Tup', 'exit', 'Port1In', 'Drinking', 'Port3In', 'Drinking'},...
         'OutputActions', {});
-
     SendStateMatrix(sma);
     RawEvents = RunStateMatrix;
     if ~isempty(fieldnames(RawEvents)) % If trial data was returned

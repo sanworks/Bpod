@@ -19,4 +19,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
 function sma = NewStateMachine
 global BpodSystem
+if isempty(BpodSystem)
+    error('You must run Bpod() before assembling a state machine.')
+end
 sma = BpodSystem.BlankStateMachine;

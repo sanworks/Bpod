@@ -37,6 +37,7 @@ class BpodObject(object):
         self.stateMachineInfo.nOutputChannels = 0
         self.stateMachineInfo.outputChannelNames = ()
         self.stateMachine = Struct()
+        self.status = Struct();
         self.syncConfig = [255, 1] # [Channel,Mode] 255 = no sync, otherwise set to a hardware channel number. Mode 0 = flip logic every trial, 1 = every state
         self.connect(serialPortName)
         self.setup()
@@ -56,17 +57,18 @@ class BpodObject(object):
         maxStates = self.serialObject.read('uint16')
         self.HW.cyclePeriod = self.serialObject.read('uint16')
         self.HW.cycleFrequency = 1000000/self.HW.cyclePeriod
-        self.HW.n.EventsPerSerialChannel = self.serialObject.read('uint8');
-        self.HW.n.GlobalTimers = self.serialObject.read('uint8');
-        self.HW.n.GlobalCounters  = self.serialObject.read('uint8');
-        self.HW.n.Conditions  = self.serialObject.read('uint8');
-        self.HW.n.Inputs = self.serialObject.read('uint8');
-        self.HW.Inputs = self.serialObject.readArray(self.HW.n.Inputs, 'char');
-        self.HW.n.Outputs = self.serialObject.read('uint8');
+        self.HW.n.EventsPerSerialChannel = self.serialObject.read('uint8')
+        self.HW.n.GlobalTimers = self.serialObject.read('uint8')
+        self.HW.n.GlobalCounters  = self.serialObject.read('uint8')
+        self.HW.n.Conditions  = self.serialObject.read('uint8')
+        self.HW.n.Inputs = self.serialObject.read('uint8')
+        self.HW.Inputs = self.serialObject.readArray(self.HW.n.Inputs, 'char')
+        self.HW.n.Outputs = self.serialObject.read('uint8')
         self.HW.Outputs = self.serialObject.readArray(self.HW.n.Outputs, 'char') + 'GGG';
-        self.stateMachineInfo.nOutputChannels = self.HW.n.Outputs + 3;
+        self.status.newStateMachineSent = 0
+        self.stateMachineInfo.nOutputChannels = self.HW.n.Outputs + 3
         self.stateMachineInfo.maxStates = maxStates;
-        self.HW.n.UARTSerialChannels = 0;
+        self.HW.n.UARTSerialChannels = 0
         for i in range(self.HW.n.Inputs):
             if self.HW.Inputs[i] == 'U':
                 self.HW.n.UARTSerialChannels += 1
@@ -144,7 +146,11 @@ class BpodObject(object):
                 Pos += 1
                 eventNames += (inputChannelNames[-1] + 'Out',)
                 Pos += 1
-        self.stateMachineInfo.Pos.globalTimer = Pos;
+        self.stateMachineInfo.Pos.globalTimerStart = Pos;
+        for i in range(self.HW.n.GlobalTimers):
+            eventNames += ('GlobalTimer' + str(i+1) + '_Start',)
+            Pos += 1
+        self.stateMachineInfo.Pos.globalTimerEnd = Pos;
         for i in range(self.HW.n.GlobalTimers):
             eventNames += ('GlobalTimer' + str(i+1) + '_End',)
             Pos += 1
@@ -234,12 +240,18 @@ class BpodObject(object):
                   if thisTransition[1] == undeclaredStateNumber:
                       inputTransitions[k] = (thisTransition[0],thisStateNumber)
               sma.inputMatrix[j] = inputTransitions
-              inputTransitions = sma.globalTimers.matrix[j]
+              inputTransitions = sma.globalTimers.startMatrix[j]
               for k in range(0,len(inputTransitions)):
                   thisTransition = inputTransitions[k]
                   if thisTransition[1] == undeclaredStateNumber:
                       inputTransitions[k] = (thisTransition[0],thisStateNumber)
-              sma.globalTimers.matrix[j] = inputTransitions
+              sma.globalTimers.startMatrix[j] = inputTransitions
+              inputTransitions = sma.globalTimers.endMatrix[j]
+              for k in range(0,len(inputTransitions)):
+                  thisTransition = inputTransitions[k]
+                  if thisTransition[1] == undeclaredStateNumber:
+                      inputTransitions[k] = (thisTransition[0],thisStateNumber)
+              sma.globalTimers.endMatrix[j] = inputTransitions
               inputTransitions = sma.globalCounters.matrix[j]
               for k in range(0,len(inputTransitions)):
                   thisTransition = inputTransitions[k]
@@ -282,13 +294,25 @@ class BpodObject(object):
                 thisHardwareConfig = currentHardwareState[j]
                 Message += (thisHardwareConfig[0],)
                 Message += (thisHardwareConfig[1],)
-        for i in range (sma.nStates): # Send global timer triggered transitions (where they are different from default)
-            currentStateTransitions = sma.globalTimers.matrix[i]
+        for i in range (sma.nStates): # Send global timer-start triggered transitions (where they are different from default)
+            currentStateTransitions = sma.globalTimers.startMatrix[i]
             nTransitions = len(currentStateTransitions)
             Message += (nTransitions,)
             for j in range (nTransitions):
                 thisTransition = currentStateTransitions[j]
-                Message += (thisTransition[0] - self.stateMachineInfo.Pos.globalTimer,)
+                Message += (thisTransition[0] - self.stateMachineInfo.Pos.globalTimerStart,)
+                destinationState = thisTransition[1]
+                if math.isnan(destinationState):
+                    Message += (sma.nStates,)
+                else:
+                    Message += (destinationState,)
+        for i in range (sma.nStates): # Send global timer-end triggered transitions (where they are different from default)
+            currentStateTransitions = sma.globalTimers.endMatrix[i]
+            nTransitions = len(currentStateTransitions)
+            Message += (nTransitions,)
+            for j in range (nTransitions):
+                thisTransition = currentStateTransitions[j]
+                Message += (thisTransition[0] - self.stateMachineInfo.Pos.globalTimerEnd,)
                 destinationState = thisTransition[1]
                 if math.isnan(destinationState):
                     Message += (sma.nStates,)
@@ -318,6 +342,12 @@ class BpodObject(object):
                     Message += (sma.nStates,)
                 else:
                     Message += (destinationState,)
+        for i in range(self.HW.n.GlobalTimers):
+            Message += (sma.globalTimers.channels[i],)
+        for i in range(self.HW.n.GlobalTimers):
+            Message += (sma.globalTimers.onMessages[i],)
+        for i in range(self.HW.n.GlobalTimers):
+            Message += (sma.globalTimers.offMessages[i],)
         for i in range(self.HW.n.GlobalCounters):
             Message += (sma.globalCounters.attachedEvents[i],)
         for i in range(self.HW.n.Conditions):
@@ -325,12 +355,10 @@ class BpodObject(object):
         for i in range(self.HW.n.Conditions):
             Message += (sma.conditions.values[i],)
         sma.stateTimers = sma.stateTimers[:sma.nStates]
-        ThirtyTwoBitMessage = [i*self.HW.cycleFrequency for i in sma.stateTimers] + [i*self.HW.cycleFrequency for i in sma.globalTimers.timers] + sma.globalCounters.thresholds
+        ThirtyTwoBitMessage = [i*self.HW.cycleFrequency for i in sma.stateTimers] + [i*self.HW.cycleFrequency for i in sma.globalTimers.timers] + [i*self.HW.cycleFrequency for i in sma.globalTimers.onsetDelays] + sma.globalCounters.thresholds
         self.serialObject.write(Message, 'uint8', ThirtyTwoBitMessage, 'uint32')
-        Confirmed = self.serialObject.read('uint8');
-        if (not Confirmed):
-            raise BpodError('Error: Failed to send state machine.')
         self.stateMachine = sma
+        self.status.newStateMachineSent = 1;
     def runStateMachine(self):
         from datetime import datetime
         self.stateMachineStartTime = datetime.now()
@@ -344,6 +372,11 @@ class BpodObject(object):
         RawEvents.StateTimestamps = [0]
         RawEvents.TrialStartTimestamp = 0;
         self.serialObject.write(ord('R'), 'uint8')
+        if self.status.newStateMachineSent == 1:
+            confirmed = self.serialObject.read('uint8')
+            if not confirmed:
+                raise BpodError('Error: The last state machine sent was not acknowledged by the Bpod device.')
+            self.status.newStateMachineSent = 0
         runningStateMachine = True
         while runningStateMachine:
             if self.serialObject.bytesAvailable() > 0:
@@ -380,7 +413,18 @@ class BpodObject(object):
                                             StateChangeIndexes.append(len(RawEvents.Events)-1)
                                         TransitionEventFound = True
                             if not TransitionEventFound:
-                                thisGlobalTimerTransitions = self.stateMachine.globalTimers.matrix[currentState]
+                                thisGlobalTimerTransitions = self.stateMachine.globalTimers.startMatrix[currentState]
+                                nTransitions = len(thisGlobalTimerTransitions)
+                                for j in range(nTransitions):
+                                    thisTransition = thisGlobalTimerTransitions[j]
+                                    if thisTransition[0] == thisEvent:
+                                        currentState = thisTransition[1]
+                                        if not math.isnan(currentState):
+                                            RawEvents.States.append(currentState)
+                                            StateChangeIndexes.append(len(RawEvents.Events)-1)
+                                        TransitionEventFound = True
+                            if not TransitionEventFound:
+                                thisGlobalTimerTransitions = self.stateMachine.globalTimers.endMatrix[currentState]
                                 nTransitions = len(thisGlobalTimerTransitions)
                                 for j in range(nTransitions):
                                     thisTransition = thisGlobalTimerTransitions[j]

@@ -1,6 +1,5 @@
 byte inByte = 0;
 void setup() {
-  // put your setup code here, to run once:
   Serial5.begin(1312500); //1312500 //2625000
 }
 
@@ -11,6 +10,6 @@ void loop() {
   }
   if (Serial5.available()) {
    inByte = Serial5.read();
-   SerialUSB.write(inByte);
+     SerialUSB.write(inByte);
   }
 }

@@ -27,7 +27,8 @@ from StateMachineAssembler import stateMachine # Import state machine assembler
 
 myBpod = BpodObject('COM13') # Create a new instance of a Bpod object on serial port COM13
 sma = stateMachine(myBpod) # Create a new state machine (events + outputs tailored for myBpod)
-sma.setGlobalTimer('TimerID', 1, 'Duration', 3) # Set global timer 1 for 3 seconds
+# Set global timer 1 for 3 seconds, following a 1.5 second onset delay after trigger. Link to channel BNC2.
+sma.setGlobalTimer('TimerID', 1, 'Duration', 3, 'OnsetDelay', 1.5, 'Channel', 'BNC2')
 sma.addState('Name', 'TimerTrig', # Trigger global timer
     'Timer', 0,
     'StateChangeConditions', ('Tup', 'Port1Lit'),

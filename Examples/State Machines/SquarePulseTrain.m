@@ -2,11 +2,11 @@
 % Sends a pulse train on BNC trigger channel 1, where alternating states
 % are high and low.
 % Useful for bench-testing SYNC line.
-
-sma = NewStateMatrix();
+pulseWidth = 0.001; %(s), set to a multiple of 100 microseconds
+sma = NewStateMachine;
 i = 1;
 for x = 1:8
-    eval(['sma = AddState(sma, ''Name'', ''State ' num2str(x) ''', ''Timer'', .001, ''StateChangeConditions'', {''Tup'', ''State ' num2str(x+1) '''}, ''OutputActions'', {''BNCState'',' num2str(i) '});']);
+    eval(['sma = AddState(sma, ''Name'', ''State ' num2str(x) ''', ''Timer'', ' num2str(pulseWidth) ', ''StateChangeConditions'', {''Tup'', ''State ' num2str(x+1) '''}, ''OutputActions'', {''BNCState'',' num2str(i) '});']);
     i = 1-i;
 end
-sma = AddState(sma, 'Name', ['State ' num2str(x+1)], 'Timer', .001, 'StateChangeConditions', {'Tup', 'exit'}, 'OutputActions', {});
+sma = AddState(sma, 'Name', ['State ' num2str(x+1)], 'Timer', pulseWidth, 'StateChangeConditions', {'Tup', 'exit'}, 'OutputActions', {});

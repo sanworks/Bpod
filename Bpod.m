@@ -38,7 +38,12 @@ if nargin > 0
         EmulatorDialog;
     else
         try
-            BpodSystem.InitializeHardware(varargin{1});
+            if nargin > 1
+                ForceJava = varargin{2};
+                BpodSystem.InitializeHardware(varargin{1}, ForceJava);
+            else
+                BpodSystem.InitializeHardware(varargin{1});
+            end
             BpodSetup;
         catch
             EmulatorDialog;

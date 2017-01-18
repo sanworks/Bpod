@@ -200,7 +200,7 @@ classdef BpodObject < handle
             obj.SyncConfig = BpodSyncConfig;
             obj.BpodSplashScreen(1);
         end
-        function obj = InitializeHardware(obj, portString)
+        function obj = InitializeHardware(obj, portString, varargin)
             if strcmp(portString, 'AUTO')
                 Ports = obj.FindArduinoPorts;
             else
@@ -209,10 +209,19 @@ classdef BpodObject < handle
             nPorts = length(Ports);
             Found = 0;
             iPort = 1;
+            if nargin > 2
+                ForceJava = 1;
+            else
+                ForceJava = 0;
+            end
             while (Found == 0) && (iPort <= nPorts)
                 ThisPort = Ports{iPort};
                 disp(['Trying port: ' ThisPort])
-                obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200);
+                if ForceJava
+                    obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200, 'Java');
+                else
+                    obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200);
+                end
                 obj.SerialPort.write('6', 'uint8');
                 pause(.1)
                 if obj.SerialPort.bytesAvailable > 0
@@ -630,7 +639,7 @@ classdef BpodObject < handle
             FontName = 'OCRASTD';
             % Add labels
             LabelFontColor = [0.8 0.8 0.8];
-            if obj.EmulatorMode == 0
+            if 1 %obj.EmulatorMode == 0
                 Title = 'Bpod Console';
                 TitleColor = LabelFontColor;
             else

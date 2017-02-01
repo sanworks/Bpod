@@ -202,6 +202,7 @@ byte SerialMessageMatrix[MaxStates+1][nSerialChannels][3]; // Stores a 3-byte se
 byte SerialMessage_nBytes[MaxStates+1][nSerialChannels] = {1}; // Stores the length of each serial message
 boolean ModuleConnected[nSerialChannels] = {false}; // true for each channel if a module is connected, false otherwise
 byte SyncChannelOriginalType = 0; // Stores sync channel's original hardware type
+uint32_t PWMChannel[nOutputs] = {0}; // Stores ARM PWM channel for each PWM output pin (assigned in advance in setup, to speed PWM writes)
 
 // Positions of input matrix parts
 const byte GlobalTimerStartPos = InputMatrixSize; // First global timer event code
@@ -373,6 +374,7 @@ for (int i = 0; i < nOutputs; i++) {
       case 'P':
         pinMode(OutputCh[i], OUTPUT);
         analogWrite(OutputCh[i], 0);
+        PWMChannel[i] = g_APinDescription[OutputCh[i]].ulPWMChannel;
       break;
     }
   }
@@ -971,8 +973,13 @@ void handler() { // This is the timer handler function, which is called every (t
             #endif
           } 
         }
+      } 
+      // Write events captured to USB (if events were captured)
+      if (nCurrentEvents > 0) {
+        BpodCOM.writeByte(1); // Code for returning events
+        BpodCOM.writeByte(nCurrentEvents);
+        BpodCOM.writeByteArray(CurrentEvent, nCurrentEvents);
       }
-  
       // Make state transition if necessary
       if (NewState != CurrentState) {
         if (NewState == nStates) {
@@ -986,12 +993,6 @@ void handler() { // This is the timer handler function, which is called every (t
           StateStartTime = CurrentTime;
           CurrentState = NewState;
         }
-      }
-      // Write events captured to USB (if events were captured)
-      if (nCurrentEvents > 0) {
-        BpodCOM.writeByte(1); // Code for returning events
-        BpodCOM.writeByte(nCurrentEvents);
-        BpodCOM.writeByteArray(CurrentEvent, nCurrentEvents);
       }
       if (cycleMonitoring) {
         MeasuredCallbackDuration = micros()-CallbackStartTime;
@@ -1172,7 +1173,8 @@ void setStateOutputs(byte State) {
         break;
         case 'P':
           if (outputOverrideState[i] == 0) {
-            analogWrite(OutputCh[i], OutputStateMatrix[State][i]); 
+            //PERFORMANCE HACK: the next line is equivalent to: analogWrite(OutputCh[i], OutputStateMatrix[State][i]); 
+            PWMC_SetDutyCycle(PWM_INTERFACE, PWMChannel[i], OutputStateMatrix[State][i]);
           }
         break;
      }

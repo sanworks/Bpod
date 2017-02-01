@@ -24,6 +24,11 @@
 #define SERIAL_RX_BUFFER_SIZE 256
 ArCOM myUSB(SerialUSB); // Creates an ArCOM object called myUSB, wrapping SerialUSB
 ArCOM myUART(Serial1); // Creates an ArCOM object called myUART, wrapping Serial1
+
+// Module setup
+unsigned long FirmwareVersion = 1;
+char moduleName[] = "I2CModule"; // Name of module for manual override UI and state machine assembler
+
 uint32_t firmwareVer = 1;
 byte opCode = 0; 
 byte currentMessage = 0; // Index of current message
@@ -115,24 +120,34 @@ void loop() {
     }
   }
   if (myUART.available()) {
-   currentMessage = myUART.readByte();
-   switch(mappingMode) {
-    case 0:
-      I2CsendByte(currentMessage);
-    break;
-    case 1:
-      I2CsendMessage(currentMessage);
-    break;
-    case 2:
-      myUSB.writeByte(currentMessage);
-    break;
-    case 3:
-      for (int i = 0; i < messageLength[currentMessage]; i++) {
-        messageBuffer[i] = messages[currentMessage][i];
-      }
-      myUSB.writeByteArray(messageBuffer, messageLength[currentMessage]);
-    break;
-   }
+    opCode = myUART.readByte();
+    switch(opCode) {
+      case 255: // Return module name and info
+        myUART.writeUint32(sizeof(moduleName)+3); // Total message length
+        myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
+        myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+      break;
+      case 1:
+         currentMessage = myUART.readByte();
+         switch(mappingMode) {
+          case 0:
+            I2CsendByte(currentMessage);
+          break;
+          case 1:
+            I2CsendMessage(currentMessage);
+          break;
+          case 2:
+            myUSB.writeByte(currentMessage);
+          break;
+          case 3:
+            for (int i = 0; i < messageLength[currentMessage]; i++) {
+              messageBuffer[i] = messages[currentMessage][i];
+            }
+            myUSB.writeByteArray(messageBuffer, messageLength[currentMessage]);
+          break;
+         }
+      break;
+    }
   }
 }
 

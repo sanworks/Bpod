@@ -23,12 +23,13 @@
 #define SERIAL_RX_BUFFER_SIZE 256
 ArCOM myUSB(SerialUSB); // Creates an ArCOM object called myUSB, wrapping SerialUSB
 ArCOM myUART(Serial1); // Creates an ArCOM object called myUART, wrapping Serial1
-uint32_t firmwareVer = 1;
+uint32_t FirmwareVersion = 1;
+char moduleName[] = "ValveModule"; // Name of module for manual override UI and state machine assembler
 byte opCode = 0; 
 byte channel = 0; 
 const byte enablePin = 4;
-const byte inputChannels[8] = {5, 6, 8, 9, 13, 12, 11, 10};
-const byte outputChannels[8] = {3, 2, 1, 0, 7, 6, 5, 4};
+const byte inputChannels[8] = {5, 6, 8, 9, 13, 12, 11, 10}; // Arduino pins
+const byte outputChannels[8] = {3, 2, 1, 0, 7, 6, 5, 4}; // Valve channels 0-7, for each arduino pin in inputChannels
 byte valveState[8] = {0};
 void setup() {
   // put your setup code here, to run once:
@@ -50,9 +51,18 @@ void loop() {
   }
   if (myUART.available()) {
    opCode = myUART.readByte();
-   channel = opCode - 65;
-   valveState[channel] = 1 - valveState[channel];
-   digitalWrite(inputChannels[outputChannels[channel]], valveState[channel]);
+   switch(opCode) {
+    case 255:
+      myUART.writeUint32(sizeof(moduleName)+3); // Total message length
+      myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
+      myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+    break;
+    default:
+      channel = opCode - 65;
+      valveState[channel] = 1 - valveState[channel];
+      digitalWrite(inputChannels[outputChannels[channel]], valveState[channel]);
+    break;
+   }
   }
 }
 

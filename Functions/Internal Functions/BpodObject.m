@@ -22,6 +22,7 @@ classdef BpodObject < handle
         FirmwareBuild % An integer specifying the firmware on the connected device
         SerialPort % ArCOM serial port object
         HW % Hardware description
+        Modules % Connected UART serial module description
         Status % Struct with system status variables
         Path % Struct with paths to Bpod root folder and specific sub-folders
         Data % Struct storing all data collected in the current session. SaveBpodSessionData saves this to the current data file.
@@ -266,12 +267,15 @@ classdef BpodObject < handle
                 disp('Connection aborted. Bpod started in Emulator mode.')
                 obj.FirmwareBuild = 9;
                 obj.MachineType = 1;
+                nModules = sum(obj.HW.Outputs=='U');
+                obj.Modules.Connected = zeros(1,nModules);
+                obj.Modules.Name = cell(1,nModules);
             else
                 % Get firmware version
                 obj.SerialPort.write('F', 'uint8');
                 obj.FirmwareBuild = obj.SerialPort.read(1, 'uint16');
                 obj.MachineType = obj.SerialPort.read(1, 'uint16');
-                obsoleteFirmware = [7 8];
+                obsoleteFirmware = [7 8 9];
                 if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
                     error('Old firmware detected. Please update Bpod firmware, restart MATLAB and try again.')
                 end
@@ -313,6 +317,33 @@ classdef BpodObject < handle
                 Confirmed = obj.SerialPort.read(1, 'uint8');
                 if Confirmed ~= 1
                     error('Could not set sync configuration');
+                end
+                % Get info from modules
+                nModules = sum(obj.HW.Outputs=='U');
+                obj.Modules.Connected = zeros(1,nModules);
+                obj.Modules.Name = cell(1,nModules);
+                obj.Modules.FirmwareVersion = zeros(1,nModules);
+                obj.SerialPort.write('M', 'uint8');
+                pause(.1);
+                messageLength = obj.SerialPort.bytesAvailable;
+                if messageLength > 2
+                    for i = 1:nModules
+                        obj.Modules.Connected(i) = obj.SerialPort.read(1, 'uint8');
+                        if obj.Modules.Connected(i) == 1
+                            nBytes = obj.SerialPort.read(1, 'uint32');
+                            obj.Modules.FirmwareVersion(i) = obj.SerialPort.read(1, 'uint32');
+                            NameString = obj.SerialPort.read(nBytes-4, 'char');
+                            SameModuleCount = 0;
+                            for j = 1:nModules
+                                if strcmp(obj.Modules.Name{j}(1:end-1), NameString)
+                                    SameModuleCount = SameModuleCount + 1;
+                                end
+                            end
+                            obj.Modules.Name{i} = [NameString num2str(SameModuleCount+1)];
+                        end
+                    end
+                else
+                    error('Error requesting module information: state machine did not return enough data.')
                 end
             end
             obj.HW.ChannelKey = 'D = digital B/W = BNC/Wire (digital), P = Port (digital in, PWM out), S = SPI, U = UART, X = USB';
@@ -359,10 +390,14 @@ classdef BpodObject < handle
                 switch obj.HW.Inputs(i)
                     case 'U'
                         nChannels = nChannels + 1;
-                        InputChannelNames{nChannels} = ['Serial' num2str(i)];
-                        for j = 1:obj.HW.n.EventsPerSerialChannel
-                            EventNames{Pos} = ['Serial' num2str(i) '_' num2str(j)]; Pos = Pos + 1;
+                        if obj.Modules.Connected(i)
+                            InputChannelNames{nChannels} = obj.Modules.Name{i};
+                        else
+                            InputChannelNames{nChannels} = ['Serial' num2str(i)];
                         end
+                        for j = 1:obj.HW.n.EventsPerSerialChannel
+                            EventNames{Pos} = [InputChannelNames{nChannels} '_' num2str(j)]; Pos = Pos + 1;
+                        end                        
                     case 'X'
                         if nUSB == 0
                             obj.HW.Pos.Event_USB = Pos;
@@ -429,7 +464,11 @@ classdef BpodObject < handle
                 Pos = Pos + 1;
                 switch obj.HW.Outputs(i)
                     case 'U'
-                        OutputChannelNames{Pos} = ['Serial' num2str(i)];
+                        if obj.Modules.Connected(i)
+                            OutputChannelNames{Pos} = obj.Modules.Name{i};
+                        else
+                            OutputChannelNames{Pos} = ['Serial' num2str(i)];
+                        end
                     case 'X'
                         OutputChannelNames{Pos} = 'SoftCode';
                         if nUSB == 0

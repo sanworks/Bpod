@@ -15,6 +15,7 @@ void setup()
 {
   Serial1.begin(1312500);
   pinMode(13, OUTPUT); 
+  digitalWrite(13, LOW);
 }
 
 void loop()
@@ -23,9 +24,7 @@ void loop()
     opCode = Serial1COM.readByte();
     switch(opCode) {
       case 255: // Return module name and info
-        Serial1COM.writeUint32(sizeof(moduleName)+3); // Total message length
-        Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
-        Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+        returnModuleInfo();
       break;
       default:
         for (int i = 0; i < opCode; i++) {
@@ -36,3 +35,11 @@ void loop()
     }  
   }
 }
+
+void returnModuleInfo() {
+  Serial1COM.writeByte(65); // Acknowledge
+  Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
+  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+}
+

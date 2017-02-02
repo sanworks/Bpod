@@ -330,9 +330,9 @@ classdef BpodObject < handle
                     for i = 1:nModules
                         obj.Modules.Connected(i) = obj.SerialPort.read(1, 'uint8');
                         if obj.Modules.Connected(i) == 1
-                            nBytes = obj.SerialPort.read(1, 'uint32');
                             obj.Modules.FirmwareVersion(i) = obj.SerialPort.read(1, 'uint32');
-                            NameString = obj.SerialPort.read(nBytes-4, 'char');
+                            nBytes = obj.SerialPort.read(1, 'uint32');
+                            NameString = obj.SerialPort.read(nBytes, 'char');
                             SameModuleCount = 0;
                             for j = 1:nModules
                                 if strcmp(obj.Modules.Name{j}(1:end-1), NameString)

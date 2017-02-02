@@ -231,9 +231,7 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
       break;
       case 255: // Return Bpod module info
         if (opSource == 1) { // Only returns this info if requested from state machine device
-          Serial1COM.writeUint32(sizeof(moduleName)+3); // Total message length
-          Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
-          Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+          returnModuleInfo();
         }
       break;
       case 'N': // Return playback params
@@ -673,4 +671,10 @@ void resetChannel(byte channel) { // Resets playback to first sample (in loop mo
       loadFlag[channel] = 1;
       preBufferActive[channel] = true;
       filePos[channel] = (maxWaveSizeBytes*waveLoaded[channel]) + bufSizeBytes;
+}
+void returnModuleInfo() {
+  Serial1COM.writeByte(65); // Acknowledge
+  Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
+  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
 }

@@ -123,9 +123,7 @@ void loop() {
     opCode = myUART.readByte();
     switch(opCode) {
       case 255: // Return module name and info
-        myUART.writeUint32(sizeof(moduleName)+3); // Total message length
-        myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
-        myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+        returnModuleInfo();
       break;
       case 1:
          currentMessage = myUART.readByte();
@@ -166,3 +164,9 @@ void I2CsendMessage(byte messageIndex) {
   Wire.endTransmission();
 }
 
+void returnModuleInfo() {
+  myUART.writeByte(65); // Acknowledge
+  myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
+  myUART.writeUint32(sizeof(moduleName)-1); // Length of module name
+  myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+}

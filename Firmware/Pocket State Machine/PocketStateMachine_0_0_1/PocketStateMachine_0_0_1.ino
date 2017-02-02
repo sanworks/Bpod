@@ -1385,15 +1385,25 @@ void setGlobalTimerChannel(byte chan, byte op) {
 }
 
 void relayModuleInfo(ArCOM serialCOM) {
-  if (serialCOM.available() > 3) {
-    nBytes = serialCOM.readUint32();
-    while(serialCOM.available() < nBytes) {}
-    BpodCOM.writeByte(1); // Module detected
-    BpodCOM.writeUint32(nBytes);
-    for (int i = 0; i < nBytes; i++) {
-      BpodCOM.writeByte(serialCOM.readByte());
+  boolean moduleFound = false;
+  if (serialCOM.available() > 0) {
+    Byte1 = serialCOM.readByte();
+    if (Byte1 == 'A') { // A = Acknowledge; this is most likely a module
+      if (serialCOM.available() > 3) {
+        moduleFound = true;
+        BpodCOM.writeByte(1); // Module detected
+        for (int i = 0; i < 4; i++) { // Send firmware version
+          BpodCOM.writeByte(serialCOM.readByte());
+        }
+        nBytes = serialCOM.readUint32(); // Length of module name
+        BpodCOM.writeUint32(nBytes);
+        for (int i = 0; i < nBytes; i++) { // Transfer module name
+          BpodCOM.writeByte(serialCOM.readByte());
+        }
+      }
     }
-  } else {
+  }
+  if (!moduleFound) {
     BpodCOM.writeByte(0); // Module not detected
   }
 }

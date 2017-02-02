@@ -53,9 +53,7 @@ void loop() {
    opCode = myUART.readByte();
    switch(opCode) {
     case 255:
-      myUART.writeUint32(sizeof(moduleName)+3); // Total message length
-      myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
-      myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module alias
+      returnModuleInfo();
     break;
     default:
       channel = opCode - 65;
@@ -64,5 +62,12 @@ void loop() {
     break;
    }
   }
+}
+
+void returnModuleInfo() {
+  myUART.writeByte(65); // Acknowledge
+  myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
+  myUART.writeUint32(sizeof(moduleName)-1); // Length of module name
+  myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
 }
 

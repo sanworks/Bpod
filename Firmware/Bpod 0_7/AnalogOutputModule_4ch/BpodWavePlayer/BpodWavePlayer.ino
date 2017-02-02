@@ -294,7 +294,7 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
           }
           Wave0 = SD.open("Wave0.wfm", FILE_WRITE);
           Wave0.seek(0); // Set write position to first byte
-          for (unsigned long longInd = 0; longInd < (maxWaves*maxWaveSize)/fileTransferBufferSize; longInd++) {
+          for (unsigned long longInd = 0; longInd < (maxWaves*maxWaveSize*2)/fileTransferBufferSize; longInd++) {
             Wave0.write(fileTransferBuffer,fileTransferBufferSize); // Write fileTransferBufferSize zeros
           }
           Wave0.close();

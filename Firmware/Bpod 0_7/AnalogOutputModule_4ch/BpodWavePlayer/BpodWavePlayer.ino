@@ -18,6 +18,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
+
+// IMPORTANT: Requires the SDFat-Beta library from:
+// https://github.com/greiman/SdFat-beta/tree/master/SdFat
+
 #include "ArCOM.h"
 #include <SPI.h>
 #include "SdFat.h"
@@ -45,8 +49,8 @@ float timerPeriod_Idle = 20; // Default hardware timer period while idle (no pla
 
 // Pin definitions
 const byte RefEnable = 32; // External 3V reference enable pin
-const byte SyncPin=14; // AD5724 Pin 7 (Sync)
-const byte LDACPin=39; // AD5724 Pin 10 (LDAC)
+const byte SyncPin=14; // AD5754 Pin 7 (Sync)
+const byte LDACPin=39; // AD5754 Pin 10 (LDAC)
 
 // System objects
 SPISettings DACSettings(30000000, MSBFIRST, SPI_MODE2); // Settings for DAC

@@ -25,7 +25,7 @@ classdef BpodWavePlayer < handle
         % For best signal quality, use the smallest range necessary for your application.
         Waveforms % Local copy of all waveforms loaded to microSD
         TriggerMode % 'Normal' plays the triggered wave(s), and ignores triggers on the same channel during playback.
-        % 'GodMode' plays the triggered wave(s), and triggers can force-start a new wave during playback.
+        % 'Master' plays the triggered wave(s), and triggers can force-start a new wave during playback.
         % 'Toggle' plays the triggered wave(s), and stops playback if the same wave is triggered again.
         TriggerProfileEnable % 'Off' = trigger byte -> bits corresponding to channels, and a waveform index byte is sent.
         % 'On' = trigger byte specifies trigger profile to play. Each trigger profile is a
@@ -41,7 +41,7 @@ classdef BpodWavePlayer < handle
     properties (Access = private)
         CurrentFirmwareVersion = 1;
         ValidRanges = {'0V:5V', '0V:10V', '0V:12V', '-5V:5V', '-10V:10V', '-12V:12V'};
-        TriggerModeStrings = {'Normal', 'GodMode', 'Toggle'};
+        TriggerModeStrings = {'Normal', 'Master', 'Toggle'};
         ValidBinaryStates = {'Off', 'On'};
         LoopModeLogic % Logic equivalent of LoopMode vector
         BpodEventsLogic % Logic equivalent of BpodEvents vector
@@ -95,12 +95,12 @@ classdef BpodWavePlayer < handle
             switch lower(mode)
                 case 'normal'
                     modeByte = 0;
-                case 'godmode'
+                case 'master'
                     modeByte = 1;
                 case 'toggle'
                     modeByte = 2;
                 otherwise
-                    error(['Invalid trigger mode: ' mode '. Valid modes are: Normal, GodMode, Toggle.'])
+                    error(['Invalid trigger mode: ' mode '. Valid modes are: Normal, Master, Toggle.'])
             end
             obj.Port.write(['T' modeByte], 'uint8');
             Confirmed = obj.Port.read(1, 'uint8');

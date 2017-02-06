@@ -446,7 +446,7 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
                   }
                 }
               break;
-              case 1: // GodMode: Trigger even if already playing
+              case 1: // Master Mode: Trigger even if already playing
                 triggerChannel(i, currentTriggerWaves[i]);
                 if (sendBpodEvents[i]) {
                     bitSet(BpodMessage, i); 

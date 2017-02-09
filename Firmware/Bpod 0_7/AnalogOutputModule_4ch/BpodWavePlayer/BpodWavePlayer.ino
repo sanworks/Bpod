@@ -447,7 +447,7 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
                 }
               break;
               case 1: // Master Mode: Trigger even if already playing
-                triggerChannel(i, currentTriggerWaves[i]);
+                triggerChannelMaster(i, currentTriggerWaves[i]);
                 if (sendBpodEvents[i]) {
                     bitSet(BpodMessage, i); 
                 }
@@ -455,7 +455,6 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
               case 2:  // Toggle mode: Trigger stops channel if playing
                 if (playing[i]) {
                   schedulePlaybackStop[i] = true;
-                  dacValue.uint16[i] = DACBits_ZeroVolts;
                 } else {
                   triggerChannel(i, currentTriggerWaves[i]);
                 }
@@ -553,6 +552,9 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
           filePos[i] = maxWaveSize*waveLoaded[i];
           dacValue.uint16[i] = DACBits_ZeroVolts;
         }
+      }
+      if (schedulePlaybackStop[i]) {
+        dacValue.uint16[i] = DACBits_ZeroVolts;
       }
     }
   }
@@ -663,6 +665,17 @@ void triggerChannel(byte channel, byte waveIndex) {
       currentSample[channel] = 0;
       channelTime[channel] = 0;
       countdown2Play[channel] = 2;
+      currentBuffer[channel] = 1;
+      bufferPos[channel] = 0;
+      preBufferActive[channel] = true;
+      filePos[channel] = (maxWaveSizeBytes*waveIndex) + bufSizeBytes;
+}
+void triggerChannelMaster(byte channel, byte waveIndex) { // In Master mode, swap waveforms immediately (no countdown2Play)
+      waveLoaded[channel] = waveIndex; 
+      currentSample[channel] = 0;
+      channelTime[channel] = 0;
+      playing[channel] = true;
+      loadFlag[channel] = 1;
       currentBuffer[channel] = 1;
       bufferPos[channel] = 0;
       preBufferActive[channel] = true;

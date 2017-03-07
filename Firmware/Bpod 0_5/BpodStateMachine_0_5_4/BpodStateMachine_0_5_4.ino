@@ -97,7 +97,7 @@ const byte nOutputs = sizeof(OutputHW);
   #endif
 #else
     const byte nSerialChannels = 6; // Must match total of 'U' and 'X' in InputHW (above)
-    const byte nEventsPerSerialChannel = 10;
+    const byte nEventsPerSerialChannel = 15;
     const int MaxStates = 256;
     const int SerialBaudRate = 1312500;
 #endif

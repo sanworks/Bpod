@@ -31,7 +31,12 @@
 #define SERIAL_TX_BUFFER_SIZE 256
 #define SERIAL_RX_BUFFER_SIZE 256
 ArCOM myUSB(SerialUSB); // USB is an ArCOM object. ArCOM wraps Arduino's SerialUSB interface, to
+ArCOM Serial1COM(Serial); // UART serial port
 // simplify moving data types between Arduino and MATLAB/GNU Octave.
+
+// Module setup
+unsigned long FirmwareVersion = 1;
+char moduleName[] = "ChoiceWheel"; // Name of module for manual override UI and state machine assembler
 
 // Hardware setup
 byte EncoderPinA = A0;
@@ -83,9 +88,12 @@ void setup() {
 
 void loop() {
   currentTime = millis();
-  if (Serial.available() > 0) {
-    opCode = Serial.read();
+  if (Serial1COM.available() > 0) {
+    opCode = Serial1COM.readByte();
     switch (opCode) {
+      case 255: // Return module name and info
+        returnModuleInfo();
+      break;
       case 'T':
         inPreTrial = true;
         EncoderPos = 512;
@@ -190,18 +198,18 @@ void loop() {
       if (EncoderPos <= leftThreshold) {
         inTrial = false;
         terminatingEvent = 1;
-        Serial.write(terminatingEvent);
+        Serial1COM.writeByte(terminatingEvent);
       }
       if (EncoderPos >= rightThreshold) {
         inTrial = false;
         terminatingEvent = 2;
-        Serial.write(terminatingEvent);
+        Serial1COM.writeByte(terminatingEvent);
       }
     }
     if (timeFromStart >= timeout) {
       inTrial = false;
       terminatingEvent = 3;
-      Serial.write(terminatingEvent);
+      Serial1COM.writeByte(terminatingEvent);
     }
     if (!inTrial) {
       startTime = currentTime;
@@ -240,7 +248,7 @@ void loop() {
       startTime = currentTime;
       preTrialDuration += timeFromStart;
       timeFromStart = 0;
-      Serial.write(4);
+      Serial1COM.writeByte(4);
     }
   }
   if (isLogging) {
@@ -254,4 +262,11 @@ void loop() {
     }
   }
   EncoderPinALastValue = EncoderPinAValue;
+}
+
+void returnModuleInfo() {
+  Serial1COM.writeByte(65); // Acknowledge
+  Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
+  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
 }

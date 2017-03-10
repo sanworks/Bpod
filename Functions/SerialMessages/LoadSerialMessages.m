@@ -33,6 +33,13 @@ if ischar(Messages)
     Messages = {Messages};
     nMessages = 1;
 end
+if ischar(SerialChannel)
+    MatchingModules = strcmp(SerialChannel, BpodSystem.Modules.Name);
+    if sum(MatchingModules) == 0
+        error(['Error loading serial messages: ' SerialChannel ' module not found.'])
+    end
+    SerialChannel = find(MatchingModules);
+end
 SerialMessage = zeros(1,nMessages*4); % Preallocate
 if nargin > 3
     MessageIndexes = varargin{1};

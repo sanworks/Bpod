@@ -446,6 +446,7 @@ void handler() { // This is the timer handler function, which is called every (t
         delayMicroseconds(100000);
         BpodCOM.flush();
         SessionStartTime = millis();
+        resetSerialMessages();
       break;
       case 'F':  // Return firmware and machine type
         BpodCOM.writeUint16(FirmwareVersion);

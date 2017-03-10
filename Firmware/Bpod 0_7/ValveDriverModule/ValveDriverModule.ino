@@ -26,6 +26,8 @@ ArCOM myUART(Serial1); // Creates an ArCOM object called myUART, wrapping Serial
 uint32_t FirmwareVersion = 1;
 char moduleName[] = "ValveModule"; // Name of module for manual override UI and state machine assembler
 byte opCode = 0; 
+byte opSource = 0;
+boolean newOp = false;
 byte channel = 0; 
 const byte enablePin = 4;
 const byte inputChannels[8] = {5, 6, 8, 9, 13, 12, 11, 10}; // Arduino pins
@@ -45,29 +47,71 @@ void setup() {
 void loop() {
   if (myUSB.available()>0) {
     opCode = myUSB.readByte();
-    channel = opCode - 65;
-    valveState[channel] = 1 - valveState[channel];
-    digitalWrite(inputChannels[outputChannels[channel]], valveState[channel]);
+    opSource = 0; newOp = true;
+  } else if (myUART.available()) {
+    opCode = myUART.readByte();
+    opSource = 1; newOp = true;
   }
-  if (myUART.available()) {
-   opCode = myUART.readByte();
-   switch(opCode) {
-    case 255:
-      returnModuleInfo();
-    break;
-    default:
-      channel = opCode - 65;
-      valveState[channel] = 1 - valveState[channel];
-      digitalWrite(inputChannels[outputChannels[channel]], valveState[channel]);
-    break;
-   }
+  if (newOp) {
+    newOp = false;
+    switch (opCode) {
+      case 255:
+        if (opSource == 1) {
+          returnModuleInfo();
+        }
+      break;
+      case 'O': // Open channel
+        if (opSource == 0) {
+          channel = myUSB.readByte();
+        } else {
+          channel = myUART.readByte();
+        }
+        channel = ascii2Num(channel)-1; // if channel is character 1-8 (ASCII 49-56), convert to 1-8
+        digitalWrite(inputChannels[outputChannels[channel]], HIGH);
+        valveState[channel] = 1;
+      break;
+      case 'C': // Close channel
+        if (opSource == 0) {
+          channel = myUSB.readByte();
+        } else {
+          channel = myUART.readByte();
+        }
+        channel = ascii2Num(channel)-1; // if channel is character 1-8 (ASCII 49-56), convert to 1-8
+        digitalWrite(inputChannels[outputChannels[channel]], LOW);
+        valveState[channel] = 0;
+      break;
+      case 'B': // Set valve states as bits of 1 byte
+        if (opSource == 0) {
+          channel = myUSB.readByte();
+        } else {
+          channel = myUART.readByte();
+        }
+        for (int i = 0; i < 8; i++) {
+          valveState[i] = bitRead(channel, i);
+          digitalWrite(inputChannels[outputChannels[i]], valveState[i]);
+        }
+      break;
+      default: // Toggle channel; toggle op Codes = 1-8 or characters 1-8
+        channel = ascii2Num(opCode);
+        if ((channel < 9) && (channel > 0)) {
+          channel = channel - 1;
+          valveState[channel] = 1 - valveState[channel];
+          digitalWrite(inputChannels[outputChannels[channel]], valveState[channel]);
+        }
+      break;
+    }
   }
 }
 
-void returnModuleInfo() {
+void returnModuleInfo() { // Return module name and firmware version
   myUART.writeByte(65); // Acknowledge
   myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
   myUART.writeUint32(sizeof(moduleName)-1); // Length of module name
   myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+}
+byte ascii2Num(byte value) { // Convert ascii numeric channels to numeric channels
+  if ((value > 48) && (value < 57)) {
+    return value - 48;
+  }
 }
 

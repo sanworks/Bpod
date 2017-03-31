@@ -18,7 +18,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Bpod State Machine v 0.7.6
+// Bpod State Machine v 0.5.5
 //
 // Requires the DueTimer library from:
 // https://github.com/ivanseidel/DueTimer
@@ -29,7 +29,7 @@
 
 // Set device type and version
 #define MachineType 1 // 1 = Bpod 0.5-0.8, 2 = Pocket State Machine
-#define FirmwareVersion 10
+#define FirmwareVersion 5
 
 #if MachineType == 1
   #include <DueTimer.h>
@@ -39,12 +39,12 @@
 #define SERIAL_TX_BUFFER_SIZE 256
 #define SERIAL_RX_BUFFER_SIZE 256
 #if MachineType == 1
-  ArCOM BpodCOM(SerialUSB); // Creates an ArCOM object called BpodCOM, wrapping SerialUSB
+  ArCOM USBCOM(SerialUSB); // Creates an ArCOM object called USBCOM, wrapping SerialUSB
   ArCOM Serial1COM(Serial1); // Creates an ArCOM object called Serial1COM, wrapping Serial1
   ArCOM Serial2COM(Serial2); 
   ArCOM Serial3COM(Serial3); 
 #else
-  ArCOM BpodCOM(Serial); // Creates an ArCOM object called BpodCOM, wrapping Serial (for Teensy 3.6)
+  ArCOM USBCOM(Serial); // Creates an ArCOM object called USBCOM, wrapping Serial (for Teensy 3.6)
   ArCOM Serial1COM(Serial1); // Creates an ArCOM object called Serial1COM, wrapping Serial1
   ArCOM Serial2COM(Serial3); 
   ArCOM Serial3COM(Serial2); 
@@ -175,6 +175,7 @@ byte SyncMode = 0; // 0 if low > high on trial start and high < low on trial end
 byte SyncState = 0; // State of the sync line (0 = low, 1 = high)
 boolean smaTransmissionConfirmed = false; // Set to true when the last state machine was successfully received, set to false when starting a transmission
 boolean newSMATransmissionStarted = false; // Set to true when beginning a state machine transmission
+boolean UARTrelayMode[nSerialChannels] = {false};
 
 //////////////////////////////////
 // Initialize general use vars:  /
@@ -429,44 +430,47 @@ void handler() { // This is the timer handler function, which is called every (t
       getModuleInfo = false; 
       relayModuleInfo(Serial1COM); // Function transmits 0 if no module replied, 1 if found, followed by length of description(bytes), then description
       relayModuleInfo(Serial2COM);
-      relayModuleInfo(Serial3COM);
+      if (nSerialChannels > 3) {
+        relayModuleInfo(Serial3COM);
+      }
       #if MachineType == 2
         relayModuleInfo(Serial4COM);
         relayModuleInfo(Serial5COM);
       #endif
     }
   }
-  if (BpodCOM.available() > 0) { // If a message has arrived on the USB serial port
-    CommandByte = BpodCOM.readByte();  // P for Program, R for Run, O for Override, 6 for Handshake, F for firmware version
+  if (USBCOM.available() > 0) { // If a message has arrived on the USB serial port
+    CommandByte = USBCOM.readByte();  // P for Program, R for Run, O for Override, 6 for Handshake, F for firmware version
     switch (CommandByte) {
       case '6':  // Initialization handshake
         connectionState = 1;
         updateStatusLED(2);
-        BpodCOM.writeByte(53);
+        USBCOM.writeByte(53);
         delayMicroseconds(100000);
-        BpodCOM.flush();
+        USBCOM.flush();
         SessionStartTime = millis();
         resetSerialMessages();
+        disableModuleRelays();
       break;
       case 'F':  // Return firmware and machine type
-        BpodCOM.writeUint16(FirmwareVersion);
-        BpodCOM.writeUint16(MachineType);
+        USBCOM.writeUint16(FirmwareVersion);
+        USBCOM.writeUint16(MachineType);
       break;
       case 'H': // Return local hardware configuration
-        BpodCOM.writeUint16(MaxStates);
-        BpodCOM.writeUint16(timerPeriod);
-        BpodCOM.writeByte(nEventsPerSerialChannel);
-        BpodCOM.writeByte(nGlobalTimers);
-        BpodCOM.writeByte(nGlobalCounters);
-        BpodCOM.writeByte(nConditions);
-        BpodCOM.writeByte(nInputs);
-        BpodCOM.writeByteArray(InputHW, nInputs);
-        BpodCOM.writeByte(nOutputs);
+        USBCOM.writeUint16(MaxStates);
+        USBCOM.writeUint16(timerPeriod);
+        USBCOM.writeByte(nEventsPerSerialChannel);
+        USBCOM.writeByte(nGlobalTimers);
+        USBCOM.writeByte(nGlobalCounters);
+        USBCOM.writeByte(nConditions);
+        USBCOM.writeByte(nInputs);
+        USBCOM.writeByteArray(InputHW, nInputs);
+        USBCOM.writeByte(nOutputs);
         for (int i = 0; i < nOutputs; i++) {
           if (OutputHW[i] == 'Y') {
-             BpodCOM.writeByte(SyncChannelOriginalType);
+             USBCOM.writeByte(SyncChannelOriginalType);
           } else {
-             BpodCOM.writeByte(OutputHW[i]);
+             USBCOM.writeByte(OutputHW[i]);
           }
         }
       break;
@@ -500,13 +504,19 @@ void handler() { // This is the timer handler function, which is called every (t
       break;
       case 'E': // Enable ports
       for (int i = 0; i < nInputs; i++) {
-        inputEnabled[i] = BpodCOM.readByte();
+        inputEnabled[i] = USBCOM.readByte();
       }
-      BpodCOM.writeByte(1);
+      USBCOM.writeByte(1);
+      break;
+      case 'J': // set serial module relay mode (when not running a state machine, relays one port's incoming bytes to MATLAB/Python
+        disableModuleRelays();
+        Byte1 = USBCOM.readByte();
+        Byte2 = USBCOM.readByte();
+        UARTrelayMode[Byte1] = Byte2;
       break;
       case 'K': // Set sync channel and mode
-      NewSyncChannel = BpodCOM.readByte();
-      SyncMode = BpodCOM.readByte();
+      NewSyncChannel = USBCOM.readByte();
+      SyncMode = USBCOM.readByte();
       if (!usesSPISync) {
         if (NewSyncChannel != SyncChannel){ 
           if (NewSyncChannel == 255) {
@@ -530,11 +540,11 @@ void handler() { // This is the timer handler function, which is called every (t
           SyncChannel = NewSyncChannel;
         }
       }
-      BpodCOM.writeByte(1);
+      USBCOM.writeByte(1);
       break;
       case 'O':  // Override digital hardware state
-        Byte1 = BpodCOM.readByte();
-        Byte2 = BpodCOM.readByte();
+        Byte1 = USBCOM.readByte();
+        Byte2 = USBCOM.readByte();
         switch (OutputHW[Byte1]) {
           case 'S':
             spiWrite(Byte2, OutputCh[Byte1]);
@@ -551,38 +561,64 @@ void handler() { // This is the timer handler function, which is called every (t
         }
       break;
       case 'I': // Read and return digital input line states (for debugging)
-        Byte1 = BpodCOM.readByte();
+        Byte1 = USBCOM.readByte();
         Byte2 = digitalReadDirect(InputCh[Byte1]);
         Byte2 = (Byte2 == logicHigh[Byte1]);
-        BpodCOM.writeByte(Byte2);
+        USBCOM.writeByte(Byte2);
       break;
       case 'Q': // Set cycle monitoring mode - 0 = off (default), 1 = on. Measures min and max time to execute timer callback.
-        cycleMonitoring = BpodCOM.readByte();
+        cycleMonitoring = USBCOM.readByte();
         if (cycleMonitoring) {
           MinCallbackDuration = timerPeriod;
           MaxCallbackDuration = 0;
         }
       break;
       case '#': // Return minimum and maximum cycle duration since monitoring mode was: 1. last checked, or 2. last activated
-        BpodCOM.writeUint16(MinCallbackDuration);
-        BpodCOM.writeUint16(MaxCallbackDuration);
+        USBCOM.writeUint16(MinCallbackDuration);
+        USBCOM.writeUint16(MaxCallbackDuration);
         MinCallbackDuration = timerPeriod;
         MaxCallbackDuration = 0;
       break;
       case 'Z':  // Bpod governing machine has closed the client program
+        disableModuleRelays();
         connectionState = 0;
         connectionState = 0;
-        BpodCOM.writeByte('1');
+        USBCOM.writeByte('1');
         updateStatusLED(0);
       break;
       case 'S': // Echo Soft code.
-        VirtualEventData = BpodCOM.readByte();
-        BpodCOM.writeByte(2);
-        BpodCOM.writeByte(VirtualEventData);
+        VirtualEventData = USBCOM.readByte();
+        USBCOM.writeByte(2);
+        USBCOM.writeByte(VirtualEventData);
       break;
-      case 'U': // Recieve byte from USB and send to hardware serial channel 1-5
-        Byte1 = BpodCOM.readByte() - 1;
-        Byte2 = BpodCOM.readByte();
+      case 'T': // Receive bytes from USB and send to hardware serial channel 1-5
+        Byte1 = USBCOM.readByte() - 1; // Serial channel
+        nBytes = USBCOM.readUint32();
+        for (int i = 0; i < nBytes; i++) {
+          switch (Byte1) {
+            case 0:
+              Serial1COM.writeByte(USBCOM.readByte());
+            break;
+            case 1:
+              Serial2COM.writeByte(USBCOM.readByte());
+            break;
+            case 2:
+              Serial3COM.writeByte(USBCOM.readByte());
+            break;
+            #if MachineType == 2
+              case 3:
+                Serial4COM.writeByte(USBCOM.readByte());
+              break;
+              case 4:
+                Serial5COM.writeByte(USBCOM.readByte());
+              break;
+            #endif
+          }
+        }
+      break;
+      case 'U': // Recieve byte CODE from USB and send to hardware serial channel 1-5
+        Byte1 = USBCOM.readByte() - 1;
+        Byte2 = USBCOM.readByte();
         Byte3 = SerialMessage_nBytes[Byte2][Byte1];
           for (int i = 0; i < Byte3; i++) {
              serialByteBuffer[i] = SerialMessageMatrix[Byte2][Byte1][i];
@@ -608,25 +644,25 @@ void handler() { // This is the timer handler function, which is called every (t
         }
         break;
       case 'L':
-        Byte1 = BpodCOM.readByte(); // Serial Channel
-        Byte2 = BpodCOM.readByte(); // nMessages arriving
+        Byte1 = USBCOM.readByte(); // Serial Channel
+        Byte2 = USBCOM.readByte(); // nMessages arriving
         for (int i = 0; i < Byte2; i++) {
-          Byte3 = BpodCOM.readByte(); // Message Index
-          Byte4 = BpodCOM.readByte(); // Message Length
+          Byte3 = USBCOM.readByte(); // Message Index
+          Byte4 = USBCOM.readByte(); // Message Length
           SerialMessage_nBytes[Byte3][Byte1] = Byte4;
           for (int j = 0; j < Byte4; j++) {
-            SerialMessageMatrix[Byte3][Byte1][j] = BpodCOM.readByte();
+            SerialMessageMatrix[Byte3][Byte1][j] = USBCOM.readByte();
           }
         }
-        BpodCOM.writeByte(1);
+        USBCOM.writeByte(1);
       break;
       case '>': // Reset serial messages to equivalent byte codes (i.e. message# 4 = one byte, 0x4)
         resetSerialMessages();
-        BpodCOM.writeByte(1);
+        USBCOM.writeByte(1);
       break;
       case 'V': // Manual override: execute virtual event
-        VirtualEventTarget = BpodCOM.readByte();
-        VirtualEventData = BpodCOM.readByte();
+        VirtualEventTarget = USBCOM.readByte();
+        VirtualEventData = USBCOM.readByte();
         if (RunningStateMatrix) {
            inputState[VirtualEventTarget] = VirtualEventData;
            inputOverrideState[VirtualEventTarget] = true;
@@ -635,7 +671,7 @@ void handler() { // This is the timer handler function, which is called every (t
       case 'C': // Get new compressed state matrix from client
         newSMATransmissionStarted = true;
         smaTransmissionConfirmed = false;
-        nStates = BpodCOM.readByte();
+        nStates = USBCOM.readByte();
         for (int x = 0; x < nStates; x++) { // Set matrix to default
           StateTimerMatrix[x] = 0;
           for (int y = 0; y < InputMatrixSize; y++) {
@@ -658,82 +694,82 @@ void handler() { // This is the timer handler function, which is called every (t
           }
         }
         for (int x = 0; x < nStates; x++) { // Get State timer matrix
-          StateTimerMatrix[x] = BpodCOM.readByte();
+          StateTimerMatrix[x] = USBCOM.readByte();
         }
         for (int x = 0; x < nStates; x++) { // Get Input Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           for (int y = 0; y<nOverrides; y++) {
-            col = BpodCOM.readByte();
-            val = BpodCOM.readByte();
+            col = USBCOM.readByte();
+            val = USBCOM.readByte();
             InputStateMatrix[x][col] = val;
           }
         }
         for (int x = 0; x < nStates; x++) { // Get Output Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           for (int y = 0; y<nOverrides; y++) {
-            col = BpodCOM.readByte();
-            val = BpodCOM.readByte();
+            col = USBCOM.readByte();
+            val = USBCOM.readByte();
             OutputStateMatrix[x][col] = val;
           }
         }
         for (int x = 0; x < nStates; x++) { // Get Global Timer Start Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           if (nOverrides > 0) {
             for (int y = 0; y<nOverrides; y++) {
-              col = BpodCOM.readByte();
-              val = BpodCOM.readByte();
+              col = USBCOM.readByte();
+              val = USBCOM.readByte();
               GlobalTimerStartMatrix[x][col] = val;
             }
           }
         }
         for (int x = 0; x < nStates; x++) { // Get Global Timer End Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           if (nOverrides > 0) {
             for (int y = 0; y<nOverrides; y++) {
-              col = BpodCOM.readByte();
-              val = BpodCOM.readByte();
+              col = USBCOM.readByte();
+              val = USBCOM.readByte();
               GlobalTimerEndMatrix[x][col] = val;
             }
           }
         }
         for (int x = 0; x < nStates; x++) { // Get Global Counter Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           if (nOverrides > 0) {
             for (int y = 0; y<nOverrides; y++) {
-              col = BpodCOM.readByte();
-              val = BpodCOM.readByte();
+              col = USBCOM.readByte();
+              val = USBCOM.readByte();
               GlobalCounterMatrix[x][col] = val;
             }
           }
         }
         for (int x = 0; x < nStates; x++) { // Get Condition Matrix differences
-          nOverrides = BpodCOM.readByte();
+          nOverrides = USBCOM.readByte();
           if (nOverrides > 0) {
             for (int y = 0; y<nOverrides; y++) {
-              col = BpodCOM.readByte();
-              val = BpodCOM.readByte();
+              col = USBCOM.readByte();
+              val = USBCOM.readByte();
               ConditionMatrix[x][col] = val;
             }
           }
         }
-        BpodCOM.readByteArray(GlobalTimerChannel, nGlobalTimers); // Get output channels of global timers
-        BpodCOM.readByteArray(GlobalTimerOnMessage, nGlobalTimers); // Get serial messages to trigger on timer start
-        BpodCOM.readByteArray(GlobalTimerOffMessage, nGlobalTimers); // Get serial messages to trigger on timer end
-        BpodCOM.readByteArray(GlobalCounterAttachedEvents, nGlobalCounters); // Get global counter attached events
-        BpodCOM.readByteArray(ConditionChannels, nConditions); // Get condition channels
-        BpodCOM.readByteArray(ConditionValues, nConditions); // Get condition values
-        BpodCOM.readUint32Array(StateTimers, nStates); // Get state timers
-        BpodCOM.readUint32Array(GlobalTimers, nGlobalTimers); // Get global timers
-        BpodCOM.readUint32Array(GlobalTimerOnsetDelays, nGlobalTimers); // Get global timer onset delays
-        BpodCOM.readUint32Array(GlobalCounterThresholds, nGlobalCounters); // Get global counter event count thresholds
+        USBCOM.readByteArray(GlobalTimerChannel, nGlobalTimers); // Get output channels of global timers
+        USBCOM.readByteArray(GlobalTimerOnMessage, nGlobalTimers); // Get serial messages to trigger on timer start
+        USBCOM.readByteArray(GlobalTimerOffMessage, nGlobalTimers); // Get serial messages to trigger on timer end
+        USBCOM.readByteArray(GlobalCounterAttachedEvents, nGlobalCounters); // Get global counter attached events
+        USBCOM.readByteArray(ConditionChannels, nConditions); // Get condition channels
+        USBCOM.readByteArray(ConditionValues, nConditions); // Get condition values
+        USBCOM.readUint32Array(StateTimers, nStates); // Get state timers
+        USBCOM.readUint32Array(GlobalTimers, nGlobalTimers); // Get global timers
+        USBCOM.readUint32Array(GlobalTimerOnsetDelays, nGlobalTimers); // Get global timer onset delays
+        USBCOM.readUint32Array(GlobalCounterThresholds, nGlobalCounters); // Get global counter event count thresholds
         smaTransmissionConfirmed = true;
       break;
-      case 'R':  // Run State Matrix
+      case 'R':  // Run State Machine
         if (newSMATransmissionStarted){
           if (smaTransmissionConfirmed) {
-            BpodCOM.writeByte(1);
+            USBCOM.writeByte(1);
           } else {
-            BpodCOM.writeByte(0);
+            USBCOM.writeByte(0);
           }
           newSMATransmissionStarted = false;
         }
@@ -1027,9 +1063,9 @@ void handler() { // This is the timer handler function, which is called every (t
       } 
       // Write events captured to USB (if events were captured)
       if (nCurrentEvents > 0) {
-        BpodCOM.writeByte(1); // Code for returning events
-        BpodCOM.writeByte(nCurrentEvents);
-        BpodCOM.writeByteArray(CurrentEvent, nCurrentEvents);
+        USBCOM.writeByte(1); // Code for returning events
+        USBCOM.writeByte(nCurrentEvents);
+        USBCOM.writeByteArray(CurrentEvent, nCurrentEvents);
       }
       // Make state transition if necessary
       if (NewState != CurrentState) {
@@ -1051,7 +1087,43 @@ void handler() { // This is the timer handler function, which is called every (t
         if (MeasuredCallbackDuration < MinCallbackDuration) {MinCallbackDuration = MeasuredCallbackDuration;}
       }
     } // End code to run after first loop
-  } // End running state matrix
+  }  else { // End running state matrix
+    for (int i = 0; i < nSerialChannels; i++) { // If relay mode is on, return any incoming module bytes to MATLAB/Python
+      if (UARTrelayMode[i]) {
+        switch(i) {
+          case 0:
+            if (Serial1COM.available()>0) {
+              USBCOM.writeByte(Serial1COM.readByte());
+            }
+          break;
+          case 1:
+            if (Serial2COM.available()>0) {
+              USBCOM.writeByte(Serial2COM.readByte());
+            }
+          break;
+          case 2:
+            if (Serial3COM.available()>0) {
+              USBCOM.writeByte(Serial3COM.readByte());
+            }
+          break;
+          case 3:
+            #if MachineType == 2
+              if (Serial4COM.available()>0) {
+                USBCOM.writeByte(Serial4COM.readByte());
+              }
+            #endif
+          break;
+          case 4:
+            #if MachineType == 2
+              if (Serial5COM.available()>0) {
+                USBCOM.writeByte(Serial5COM.readByte());
+              }
+            #endif
+          break;
+        }
+      }
+    }
+  } // End if not running state matrix
   if (MatrixFinished) {
     if (SyncMode == 0) {
       ResetSyncLine();
@@ -1063,10 +1135,10 @@ void handler() { // This is the timer handler function, which is called every (t
     serialByteBuffer[0] = 1; // Op Code for sending events
     serialByteBuffer[1] = 1; // Read one event
     serialByteBuffer[2] = 255; // Send Matrix-end code
-    BpodCOM.writeByteArray(serialByteBuffer, 3);
+    USBCOM.writeByteArray(serialByteBuffer, 3);
     // Send trial-start timestamp (from millis() clock)
-    BpodCOM.writeUint32(MatrixStartTimeMillis - SessionStartTime);
-    BpodCOM.writeUint16(nEvents);
+    USBCOM.writeUint32(MatrixStartTimeMillis - SessionStartTime);
+    USBCOM.writeUint16(nEvents);
     if (usesFRAM) {
       // Return event times from fRAM IC
       digitalWriteDirect(fRAMhold, HIGH);
@@ -1076,12 +1148,12 @@ void handler() { // This is the timer handler function, which is called every (t
       SPI.transfer(0);
       SPI.transfer(0);
       for (int i = 0; i < nEvents * 4; i++) {
-        BpodCOM.writeByte(SPI.transfer(0));
+        USBCOM.writeByte(SPI.transfer(0));
       }
       digitalWriteDirect(fRAMcs, HIGH);
     } else {
       #if FirmwareVersion < 7
-        BpodCOM.writeUint32Array(Timestamps, nEvents);
+        USBCOM.writeUint32Array(Timestamps, nEvents);
       #endif
     }
     MatrixFinished = false;
@@ -1209,7 +1281,7 @@ void setStateOutputs(byte State) {
         if (OutputStateMatrix[State][i] > 0) {
           serialByteBuffer[0] = 2; // Code for MATLAB to receive soft-code byte
           serialByteBuffer[1] = OutputStateMatrix[State][i]; // Soft code byte
-          BpodCOM.writeByteArray(serialByteBuffer, 2);
+          USBCOM.writeByteArray(serialByteBuffer, 2);
         }
         break;
         case 'S':
@@ -1392,20 +1464,26 @@ void relayModuleInfo(ArCOM serialCOM) {
     if (Byte1 == 'A') { // A = Acknowledge; this is most likely a module
       if (serialCOM.available() > 3) {
         moduleFound = true;
-        BpodCOM.writeByte(1); // Module detected
+        USBCOM.writeByte(1); // Module detected
         for (int i = 0; i < 4; i++) { // Send firmware version
-          BpodCOM.writeByte(serialCOM.readByte());
+          USBCOM.writeByte(serialCOM.readByte());
         }
         nBytes = serialCOM.readUint32(); // Length of module name
-        BpodCOM.writeUint32(nBytes);
+        USBCOM.writeUint32(nBytes);
         for (int i = 0; i < nBytes; i++) { // Transfer module name
-          BpodCOM.writeByte(serialCOM.readByte());
+          USBCOM.writeByte(serialCOM.readByte());
         }
       }
     }
   }
   if (!moduleFound) {
-    BpodCOM.writeByte(0); // Module not detected
+    USBCOM.writeByte(0); // Module not detected
+  }
+}
+
+void disableModuleRelays() {
+  for (int i = 0; i < nSerialChannels; i++) { // Shut off all other channels
+    UARTrelayMode[Byte1] = false;
   }
 }
 

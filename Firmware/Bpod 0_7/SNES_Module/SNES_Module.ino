@@ -13,9 +13,9 @@
 unsigned long FirmwareVersion = 1;
 char moduleName[] = "SNES"; // Name of module for manual override UI and state machine assembler
 ArCOM Serial1COM(Serial1); // Wrap Serial5 (equivalent to Serial on Arduino Leonardo and Serial1 on Arduino Due)
-const byte clockPin = A2;
-const byte latchPin = A1;
-const byte dataPin = A0;
+const byte clockPin = 10;
+const byte latchPin = 11;
+const byte dataPin = 12;
 const byte ledPin = 13;
 const byte buttonMap[] = {8, 0, 4, 5, 6, 7, 3}; // Remapped codes from the SNES controller's native bit scheme (see comment above)
 unsigned long debounceTimer = 20; // Debounce timer - inactivates button briefly after a press or release (Milliseconds)

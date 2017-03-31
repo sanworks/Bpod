@@ -22,13 +22,14 @@ global BpodSystem
 switch Opstring
     case 'StartPause'
         if BpodSystem.Status.BeingUsed == 0
-            clear PB
-            ProtocolNames = get(BpodSystem.GUIHandles.ProtocolSelector, 'String');
-            SelectedProtocol = get(BpodSystem.GUIHandles.ProtocolSelector, 'Value');
-            SelectedProtocolName = ProtocolNames{SelectedProtocol};
-            BpodSystem.Status.CurrentProtocolName = SelectedProtocolName;
-            addpath(fullfile(BpodSystem.Path.ProtocolFolder, SelectedProtocolName));
-            LaunchManager;
+%             clear PB
+%             ProtocolNames = get(BpodSystem.GUIHandles.ProtocolSelector, 'String');
+%             SelectedProtocol = get(BpodSystem.GUIHandles.ProtocolSelector, 'Value');
+%             SelectedProtocolName = ProtocolNames{SelectedProtocol};
+%             BpodSystem.Status.CurrentProtocolName = SelectedProtocolName;
+%             addpath(fullfile(BpodSystem.Path.ProtocolFolder, SelectedProtocolName));
+            BpodSystem.StopModuleRelay;
+            NewLaunchManager;
         else
             if BpodSystem.Status.Pause == 0
                 disp('Pause requested. The system will pause after the current trial completes.')
@@ -79,7 +80,7 @@ switch Opstring
             end
         catch
         end
-        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.GoButton, 'TooltipString', 'Run selected protocol');
+        set(BpodSystem.GUIHandles.RunButton, 'cdata', BpodSystem.GUIData.GoButton, 'TooltipString', 'Launch behavior session');
         if BpodSystem.Status.Pause == 1
             BpodSystem.Status.Pause = 0;
         end

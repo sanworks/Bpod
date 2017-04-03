@@ -256,6 +256,7 @@ byte firstLoop= 0; // 1 if first timer callback in state matrix
 int Ev = 0; // Index of current event
 byte nOverrides = 0; // Number of overrides on a line of the state matrix (for compressed transmission scheme)
 byte col = 0; byte val = 0; // col and val are used in compression scheme
+byte UARTRelayBuffer[128] = {0}; // Stores bytes to be relayed to a module
 union {
   byte Bytes[20];
   int32_t Uint32[5];
@@ -263,6 +264,8 @@ union {
 #if MachineType == 2
   IntervalTimer hardwareTimer;
 #endif
+
+
 void setup() {
 // Resolve hardware peripherals from firmware version and state machine type
 if (MachineType == 1) {
@@ -414,7 +417,9 @@ for (int i = 0; i < nOutputs; i++) {
 }
 
 void loop() {
-  
+  if (!RunningStateMatrix) {
+    relayModuleBytes();
+  }
 }
 
 void handler() { // This is the timer handler function, which is called every (timerPeriod) us
@@ -510,6 +515,7 @@ void handler() { // This is the timer handler function, which is called every (t
       break;
       case 'J': // set serial module relay mode (when not running a state machine, relays one port's incoming bytes to MATLAB/Python
         disableModuleRelays();
+        clearSerialBuffers();
         Byte1 = USBCOM.readByte();
         Byte2 = USBCOM.readByte();
         UARTrelayMode[Byte1] = Byte2;
@@ -593,28 +599,31 @@ void handler() { // This is the timer handler function, which is called every (t
       break;
       case 'T': // Receive bytes from USB and send to hardware serial channel 1-5
         Byte1 = USBCOM.readByte() - 1; // Serial channel
-        nBytes = USBCOM.readUint32();
-        for (int i = 0; i < nBytes; i++) {
-          switch (Byte1) {
-            case 0:
-              Serial1COM.writeByte(USBCOM.readByte());
+        nBytes = USBCOM.readUint8();
+        switch (Byte1) {
+          case 0:
+            USBCOM.readByteArray(UARTRelayBuffer, nBytes);
+            Serial1COM.writeByteArray(UARTRelayBuffer, nBytes);
+          break;
+          case 1:
+            USBCOM.readByteArray(UARTRelayBuffer, nBytes);
+            Serial2COM.writeByteArray(UARTRelayBuffer, nBytes);
+          break;
+          case 2:
+            USBCOM.readByteArray(UARTRelayBuffer, nBytes);
+            Serial3COM.writeByteArray(UARTRelayBuffer, nBytes);
+          break;
+          #if MachineType == 2
+            case 3:
+              USBCOM.readByteArray(UARTRelayBuffer, nBytes);
+              Serial4COM.writeByteArray(UARTRelayBuffer, nBytes);
             break;
-            case 1:
-              Serial2COM.writeByte(USBCOM.readByte());
+            case 4:
+              USBCOM.readByteArray(UARTRelayBuffer, nBytes);
+              Serial5COM.writeByteArray(UARTRelayBuffer, nBytes);
             break;
-            case 2:
-              Serial3COM.writeByte(USBCOM.readByte());
-            break;
-            #if MachineType == 2
-              case 3:
-                Serial4COM.writeByte(USBCOM.readByte());
-              break;
-              case 4:
-                Serial5COM.writeByte(USBCOM.readByte());
-              break;
-            #endif
-          }
-        }
+          #endif
+         }
       break;
       case 'U': // Recieve byte CODE from USB and send to hardware serial channel 1-5
         Byte1 = USBCOM.readByte() - 1;
@@ -668,7 +677,7 @@ void handler() { // This is the timer handler function, which is called every (t
            inputOverrideState[VirtualEventTarget] = true;
         }
       break;
-      case 'C': // Get new compressed state matrix from client
+      case 'C': // Get new compressed state matrix from MATLAB/Python
         newSMATransmissionStarted = true;
         smaTransmissionConfirmed = false;
         nStates = USBCOM.readByte();
@@ -809,43 +818,7 @@ void handler() { // This is the timer handler function, which is called every (t
           }
           inputOverrideState[i] = false;
         }
-        // Clear hardware serial buffers
-        Byte1 = 0;
-        for (int i = 0; i < BNCInputPos; i++) {
-            switch (InputHW[i]) {
-              case 'U': 
-                  switch(Byte1) {
-                    case 0:
-                      while (Serial1COM.available() > 0) {
-                        Serial1COM.readByte(); Byte1++;
-                      }
-                    break;
-                    case 1:
-                      while (Serial2COM.available() > 0) {
-                        Serial2COM.readByte(); Byte1++;
-                      }
-                    break;
-                    case 2:
-                      while (Serial3COM.available() > 0) {
-                        Serial3COM.readByte(); Byte1++;
-                      }
-                    break;
-                    #if MachineType == 2
-                      case 3:
-                        while (Serial4COM.available() > 0) {
-                          Serial4COM.readByte(); Byte1++;
-                        }
-                      break;
-                      case 4:
-                        while (Serial5COM.available() > 0) {
-                          Serial5COM.readByte(); Byte1++;
-                        }
-                      break;
-                    #endif
-                  }
-             break;
-           }
-        }
+        clearSerialBuffers();
         // Reset timers
         MatrixStartTime = 0;
         StateStartTime = 0;
@@ -1087,42 +1060,9 @@ void handler() { // This is the timer handler function, which is called every (t
         if (MeasuredCallbackDuration < MinCallbackDuration) {MinCallbackDuration = MeasuredCallbackDuration;}
       }
     } // End code to run after first loop
-  }  else { // End running state matrix
-    for (int i = 0; i < nSerialChannels; i++) { // If relay mode is on, return any incoming module bytes to MATLAB/Python
-      if (UARTrelayMode[i]) {
-        switch(i) {
-          case 0:
-            if (Serial1COM.available()>0) {
-              USBCOM.writeByte(Serial1COM.readByte());
-            }
-          break;
-          case 1:
-            if (Serial2COM.available()>0) {
-              USBCOM.writeByte(Serial2COM.readByte());
-            }
-          break;
-          case 2:
-            if (Serial3COM.available()>0) {
-              USBCOM.writeByte(Serial3COM.readByte());
-            }
-          break;
-          case 3:
-            #if MachineType == 2
-              if (Serial4COM.available()>0) {
-                USBCOM.writeByte(Serial4COM.readByte());
-              }
-            #endif
-          break;
-          case 4:
-            #if MachineType == 2
-              if (Serial5COM.available()>0) {
-                USBCOM.writeByte(Serial5COM.readByte());
-              }
-            #endif
-          break;
-        }
-      }
-    }
+  }  else { // If not running state matrix
+    
+   
   } // End if not running state matrix
   if (MatrixFinished) {
     if (SyncMode == 0) {
@@ -1484,6 +1424,98 @@ void relayModuleInfo(ArCOM serialCOM) {
 void disableModuleRelays() {
   for (int i = 0; i < nSerialChannels; i++) { // Shut off all other channels
     UARTrelayMode[Byte1] = false;
+  }
+}
+
+void relayModuleBytes() {
+  for (int i = 0; i < nSerialChannels; i++) { // If relay mode is on, return any incoming module bytes to MATLAB/Python
+      if (UARTrelayMode[i]) {
+        switch(i) {
+          case 0:
+            Byte3 = Serial1COM.available();
+            if (Byte3>0) { 
+              for (int j = 0; j < Byte3; j++) {
+                 USBCOM.writeByte(Serial1COM.readByte());       
+              }
+            }
+          break;
+          case 1:
+            Byte3 = Serial2COM.available();
+            if (Byte3>0) { 
+              for (int j = 0; j < Byte3; j++) {
+                 USBCOM.writeByte(Serial2COM.readByte());       
+              }
+            }
+          break;
+          case 2:
+            Byte3 = Serial3COM.available();
+            if (Byte3>0) { 
+              for (int j = 0; j < Byte3; j++) {
+                 USBCOM.writeByte(Serial3COM.readByte());       
+              }
+            }
+          break;
+          case 3:
+            #if MachineType == 2
+              Byte3 = Serial4COM.available();
+            if (Byte3>0) { 
+              for (int j = 0; j < Byte3; j++) {
+                 USBCOM.writeByte(Serial4COM.readByte());       
+              }
+            }
+            #endif
+          break;
+          case 4:
+            #if MachineType == 2
+              Byte3 = Serial5COM.available();
+            if (Byte3>0) { 
+              for (int j = 0; j < Byte3; j++) {
+                 USBCOM.writeByte(Serial5COM.readByte());       
+              }
+            }
+            #endif
+          break;
+        }
+      }
+    }
+}
+
+void clearSerialBuffers() {
+  Byte1 = 0;
+  for (int i = 0; i < BNCInputPos; i++) {
+      switch (InputHW[i]) {
+        case 'U': 
+            switch(Byte1) {
+              case 0:
+                while (Serial1COM.available() > 0) {
+                  Serial1COM.readByte(); Byte1++;
+                }
+              break;
+              case 1:
+                while (Serial2COM.available() > 0) {
+                  Serial2COM.readByte(); Byte1++;
+                }
+              break;
+              case 2:
+                while (Serial3COM.available() > 0) {
+                  Serial3COM.readByte(); Byte1++;
+                }
+              break;
+              #if MachineType == 2
+                case 3:
+                  while (Serial4COM.available() > 0) {
+                    Serial4COM.readByte(); Byte1++;
+                  }
+                break;
+                case 4:
+                  while (Serial5COM.available() > 0) {
+                    Serial5COM.readByte(); Byte1++;
+                  }
+                break;
+              #endif
+            }
+       break;
+     }
   }
 }
 

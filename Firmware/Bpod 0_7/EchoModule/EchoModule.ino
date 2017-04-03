@@ -15,6 +15,11 @@ char moduleName[] = "EchoModule"; // Name of module for manual override UI and s
 ArCOM Serial1COM(Serial1); // UART serial port
 
 byte inByte = 0;
+byte nBytes = 0;
+byte SerialInputBuffer[256] = {0};
+byte SerialOutputBuffer[256] = {0};
+byte outputBufferIndex = 0;
+
 void setup() {
   Serial1.begin(1312500);
   pinMode(13, OUTPUT); // Set board LED to illuminate
@@ -26,16 +31,22 @@ void loop() {
     inByte = SerialUSB.read(); // Read the byte
     Serial1.write(inByte); // Send to state machine
   }
-  if (Serial1.available()) { // If a byte arrived from the state machine
-     inByte = Serial1.read();
-     switch (inByte) { 
-      case 255: // Return module name and info
+  nBytes = Serial1.available();
+  if (nBytes > 0) { // If a byte arrived from the state machine
+     Serial1.readBytes(SerialInputBuffer, nBytes);
+     outputBufferIndex = 0;
+     for (int i = 0; i < nBytes; i++) {
+      if (SerialInputBuffer[i] == 255) {
         returnModuleInfo();
-      break;
-      default:
-       Serial1.write(inByte); // Echo byte back to state machine
-       SerialUSB.write(inByte); // Send copy to USB serial terminal
-      break;
+      } else {
+        SerialOutputBuffer[outputBufferIndex] = SerialInputBuffer[i];
+        outputBufferIndex++;
+      }
+     }
+     if (outputBufferIndex > 0) {
+      Serial1.write(SerialOutputBuffer, outputBufferIndex);
+      SerialUSB.write(SerialOutputBuffer, outputBufferIndex);
+      outputBufferIndex = 0;
      }
   }
 }

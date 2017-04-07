@@ -1108,13 +1108,15 @@ classdef BpodObject < handle
                 end
             end
             obj.GUIData.CurrentPanel = panel;
-            % Set module byte stream relay to current module
-            obj.StopModuleRelay;
-            if panel > 1 
-                if obj.Status.BeingUsed == 0 && obj.GUIData.DefaultPanel(panel) == 1
-                    obj.SerialPort.write(['J' panel-2 1], 'uint8');
-                    % Start timer to scan port
-                    start(obj.Timers.PortRelayTimer);
+            if obj.EmulatorMode == 0
+                % Set module byte stream relay to current module
+                obj.StopModuleRelay;
+                if panel > 1 
+                    if obj.Status.BeingUsed == 0 && obj.GUIData.DefaultPanel(panel) == 1
+                        obj.SerialPort.write(['J' panel-2 1], 'uint8');
+                        % Start timer to scan port
+                        start(obj.Timers.PortRelayTimer);
+                    end
                 end
             end
             obj.FixPushbuttons;

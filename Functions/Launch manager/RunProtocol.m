@@ -22,13 +22,9 @@ global BpodSystem
 switch Opstring
     case 'StartPause'
         if BpodSystem.Status.BeingUsed == 0
-%             clear PB
-%             ProtocolNames = get(BpodSystem.GUIHandles.ProtocolSelector, 'String');
-%             SelectedProtocol = get(BpodSystem.GUIHandles.ProtocolSelector, 'Value');
-%             SelectedProtocolName = ProtocolNames{SelectedProtocol};
-%             BpodSystem.Status.CurrentProtocolName = SelectedProtocolName;
-%             addpath(fullfile(BpodSystem.Path.ProtocolFolder, SelectedProtocolName));
-            BpodSystem.StopModuleRelay;
+            if BpodSystem.EmulatorMode == 0
+                BpodSystem.StopModuleRelay;
+            end
             NewLaunchManager;
         else
             if BpodSystem.Status.Pause == 0

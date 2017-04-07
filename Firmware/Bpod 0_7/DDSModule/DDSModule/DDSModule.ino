@@ -56,8 +56,8 @@ union {
 byte dacBytes[2] = {0};
 float frequency = 0;
 unsigned long frequencyInt = 0;
-unsigned long adcValue = 0;
-uint32_t ampValue = 0; // Value of amplitude scaling (0:10,000) 0 = 150mV, 10,000 = 650mV
+uint16_t adcValue = 0;
+uint32_t ampValue = 10000; // Value of amplitude scaling (0:10,000) 0 = 150mV, 10,000 = 650mV
 byte op = 0;
 boolean newOp = false;
 byte opSource = 0;
@@ -114,29 +114,44 @@ void loop() {
         switch (opSource) {
           case 0:
             frequencyInt = USBCOM.readUint32();
-            frequency = ((double)frequencyInt);
             USBCOM.writeByte(1);
           break;
           case 1:
             frequencyInt = StateMachineCOM.readUint32();
-            frequency = ((double)frequencyInt);
           break;
           case 2:
-            adcValue = ModuleCOM.readUint32();
-            switch (mappingFunctionIndex) {
-              case 0:
-                frequency = linearMap(adcValue, 0, 65535, frequencyRange[0], frequencyRange[1]);
-              break;
-              case 1:
-                frequency = expMap(adcValue, 0, 65535, frequencyRange[0], frequencyRange[1]);
-              break;
-            }
+            frequencyInt = ModuleCOM.readUint32();
+          break;
+        }
+        frequency = ((double)frequencyInt)/1000;
+        myDDS.setFrequency(0, frequency);
+        myDDS.setFrequency(1, frequency);
+      break;
+      case 'M': // Map 16-bit value to frequency
+        switch (opSource) {
+          case 0:
+            adcValue = USBCOM.readUint16();
+            USBCOM.writeByte(1);
+          break;
+          case 1:
+            adcValue = StateMachineCOM.readUint16();
+          break;
+          case 2:
+            adcValue = ModuleCOM.readUint16();
+          break;
+        }
+        switch (mappingFunctionIndex) {
+          case 0:
+            frequency = linearMap(adcValue, 0, 65535, frequencyRange[0], frequencyRange[1]);
+          break;
+          case 1:
+            frequency = expMap(adcValue, 0, 65535, frequencyRange[0], frequencyRange[1]);
           break;
         }
         myDDS.setFrequency(0, frequency);
         myDDS.setFrequency(1, frequency);
       break;
-      case 'A': // Set amplitude. Range = 0 : 10000. Note: Amplitude is not 0 at 0
+      case 'A': // Set amplitude. Range = 0 : 10000 ~ 150mV : 650mV p2p
       switch (opSource) {
           case 0:
             ampValue = USBCOM.readUint32();
@@ -154,11 +169,14 @@ void loop() {
       break;
       case 'Q': // USB request to return current parameters
         USBCOM.writeUint32((uint32_t)(frequency*1000));
-        USBCOM.writeUint32((uint32_t)(dacVal*1000));
+        USBCOM.writeUint32((uint32_t)(ampValue*1000));
         USBCOM.writeByte(currentWaveform);
         USBCOM.writeByte(mappingFunctionIndex);
         USBCOM.writeUint32(frequencyRange[0]*1000);
         USBCOM.writeUint32(frequencyRange[1]*1000);
+      break;
+      case 'V': // USB request to return frequency
+        USBCOM.writeUint32((uint32_t)(frequency*1000));
       break;
       case 'R': // Set frequency output range
         switch (opSource) {
@@ -177,7 +195,7 @@ void loop() {
           break;
         }
       break;
-      case 'M': // Set mapping function by index
+      case 'N': // Set mapping function by index
         switch (opSource) {
           case 0:
             mappingFunctionIndex = USBCOM.readByte();
@@ -226,11 +244,11 @@ void dacWrite(uint16_t value) {
   digitalWrite(DACcs, HIGH);
 }
 
-double linearMap(long x, long in_min, long in_max, long out_min, long out_max) {
+double linearMap(uint16_t x, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max) {
   return ((double)x - (double)in_min) * ((double)out_max - (double)out_min) / ((double)in_max - (double)in_min) + (double)out_min;
 }
 
-double expMap(uint32_t input, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max) {
+double expMap(uint16_t input, uint32_t in_min, uint32_t in_max, uint32_t out_min, uint32_t out_max) {
   uint32_t inputRange = in_max - in_min;
   uint32_t outputRange = out_max - out_min;
   return ((sq((double)input-(double)in_min)/sq((double)inputRange))*(double)outputRange)+(double)out_min;

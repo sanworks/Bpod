@@ -33,8 +33,8 @@ void loop() { // loop runs in parallel with hardware timer callback, at lower in
 
 void timerCallback() { // runs once each time the hardware timer ticks
   adcValue = analogRead(AnalogChannel);
-  Serial1COM.writeByte('F');
-  Serial1COM.writeUint32(adcValue);
+  Serial1COM.writeByte('M');
+  Serial1COM.writeUint16(adcValue);
 }
 
 // ---------------- These functions use ARM commands to initialize and handle the timer. -------------------------

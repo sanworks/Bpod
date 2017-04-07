@@ -47,17 +47,12 @@ classdef DDSModule < handle
             if obj.FirmwareVersion < obj.CurrentFirmwareVersion
                 error(['Error: old firmware detected - v' obj.FirmwareVersion '. The current version is: ' obj.CurrentFirmwareVersion '. Please update the I2C messenger firmware using Arduino.'])
             end
-            obj.Port.write('Q', 'uint8'); % Request settings
-            obj.Frequency = double(obj.Port.read(1, 'uint32'))/1000;
-            obj.Amplitude = double(obj.Port.read(1, 'uint32'))/1000;
-            obj.Waveform = obj.ValidWaveforms{obj.Port.read(1, 'uint8')+1};
-            obj.MapFcn = obj.ValidMapFunctions{obj.Port.read(1, 'uint8')+1};
-            obj.OutputMapRange = double(obj.Port.read(2, 'uint32'))/1000;
+            obj.GetParams;
             obj.Initialized = 1;
         end
         function set.Frequency(obj, freq)
             if obj.Initialized
-                obj.Port.write('F', 'uint8', freq, 'uint32');
+                obj.Port.write('F', 'uint8', freq*1000, 'uint32');
                 Confirmed = obj.Port.read(1, 'uint8');
                 if Confirmed ~= 1
                     error('Error setting frequency. Confirm code not returned.');
@@ -93,7 +88,7 @@ classdef DDSModule < handle
                 obj.Port.write('A', 'uint8', ampValue, 'uint32');
                 Confirmed = obj.Port.read(1, 'uint8');
                 if Confirmed ~= 1
-                    error('Error setting frequency. Confirm code not returned.');
+                    error('Error setting amplitude. Confirm code not returned.');
                 end
             end
             obj.Amplitude = amp;
@@ -118,13 +113,35 @@ classdef DDSModule < handle
                 error(['Error: ' functionName ' is an invalid map function name. Valid names are: Linear, Exp'])
             end
             if obj.Initialized
-                obj.Port.write(['M' FcnIndex-1], 'uint8');
+                obj.Port.write(['N' FcnIndex-1], 'uint8');
                 Confirmed = obj.Port.read(1, 'uint8');
                 if Confirmed ~= 1
                     error('Error setting map function. Confirm code not returned.');
                 end
             end
             obj.MapFcn = functionName;
+        end
+        function map2Freq(obj, Value16Bit)
+            if Value16Bit < 0 || Value16Bit > (2^16)-1
+                error('Error: value must be in 16-bit range [0 (2^16)-1]')
+            end
+            obj.Port.write('M', 'uint8', Value16Bit, 'uint16');
+            Confirmed = obj.Port.read(1, 'uint8');
+            if Confirmed ~= 1
+                error('Error setting mapped frequency. Confirm code not returned.');
+            end
+            obj.Port.write('V', 'uint8'); % Request frequency
+            obj.Initialized = 0; % Temporarily disable object -> hardware sync
+            obj.Frequency = double(obj.Port.read(1, 'uint32'))/1000;
+            obj.Initialized = 1;
+        end
+        function GetParams(obj)
+            obj.Port.write('Q', 'uint8'); % Request settings
+            obj.Frequency = double(obj.Port.read(1, 'uint32'))/1000;
+            obj.Amplitude = (double(obj.Port.read(1, 'uint32'))/1000)/10000;
+            obj.Waveform = obj.ValidWaveforms{obj.Port.read(1, 'uint8')+1};
+            obj.MapFcn = obj.ValidMapFunctions{obj.Port.read(1, 'uint8')+1};
+            obj.OutputMapRange = double(obj.Port.read(2, 'uint32'))/1000;
         end
         function delete(obj)
             obj.Port = []; % Trigger the ArCOM port's destructor function (closes and releases port)

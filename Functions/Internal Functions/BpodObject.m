@@ -1020,8 +1020,7 @@ classdef BpodObject < handle
         function obj = BeingUsed(obj)
             error('Error: "BpodSystem.BeingUsed" is now "BpodSystem.Status.BeingUsed" - Please update your protocol!')
         end
-        function StopModuleRelay(obj)
-            
+        function StopModuleRelay(obj) 
             RunningState = get(obj.Timers.PortRelayTimer, 'Running');
             if strcmp(RunningState, 'on')
                 stop(obj.Timers.PortRelayTimer);
@@ -1036,6 +1035,7 @@ classdef BpodObject < handle
                 trash = obj.SerialPort.read(nAvailable, 'uint8');
             end
         end
+        
         function delete(obj) % Destructor
             obj.SerialPort = []; % Trigger the ArCOM port's destructor function (closes and releases port)
             stop(obj.Timers.PortRelayTimer);

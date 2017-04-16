@@ -17,8 +17,15 @@ See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 %}
-function Confirmed = SendStateMachine(sma)
+function Confirmed = SendStateMachine(sma, varargin)
 global BpodSystem
+RunMessage = []; % If 'RunImmediately' argument is provided, 'R' gets appended to the state machine serial message
+if nargin > 1
+    runImmediately = varargin{1};
+    if strcmp(runImmediately, 'RunImmediately')
+        RunMessage = 'R';
+    end
+end
 nStates = length(sma.StateNames);
 %% Check to make sure the Placeholder state was replaced
 if strcmp(sma.StateNames{1},'Placeholder')
@@ -231,7 +238,7 @@ ThirtyTwoBitMatrix = [StateTimers GlobalTimers GlobalTimerDelays GlobalCounterTh
 
 if BpodSystem.EmulatorMode == 0
     %% Send state matrix to Bpod device
-    ByteString = [EightBitMatrix typecast(ThirtyTwoBitMatrix, 'uint8')];
+    ByteString = [EightBitMatrix typecast(ThirtyTwoBitMatrix, 'uint8') RunMessage];
     BpodSystem.SerialPort.write(ByteString, 'uint8');
     
 %% Confirm send. Note: To reduce dead time, transmission is confirmed from state machine after next call to RunStateMachine()

@@ -6,18 +6,19 @@
 // Pin1 (flat end of connector) --> 3.3V, Pin2 --> Pin2, Pin3 --> Pin3, Pin4 --> Pin4, Pins 5-6: N/C, Pin7: GND 
 // Note: The controller's native bit scheme is a 12-bit register. Bpod events (above) are rearranged for parsimony. The register reads: 
 // 0=B; 1=Y; 2=Select; 3=Start; 4=Up; 5=Down; 6=Left; 7=Right; 8=A; 9=X; 10=Left (index finger trigger); 11=Right (index finger trigger).
-
 #include "ArCOM.h" // Import serial communication wrapper
 
 // Module setup
 unsigned long FirmwareVersion = 1;
 char moduleName[] = "SNES"; // Name of module for manual override UI and state machine assembler
+char* eventNames[] = {"A", "B", "X", "Y", "U", "D", "L", "R", "Ltrg", "Rtrg", "Strt", "Slct", "A0", "B0", "X0", "Y0", "U0", "D0", "L0", "R0", "Ltrg0", "Rtrg0", "Strt0", "Slct0"};
+byte nEventNames = (sizeof(eventNames)/sizeof(char *));
+const byte buttonMap[] = {8, 0, 9, 1, 4, 5, 6, 7, 10, 11, 3, 2}; // Remapped codes from the SNES controller's native bit scheme (see comment above)
 ArCOM Serial1COM(Serial1); // Wrap Serial5 (equivalent to Serial on Arduino Leonardo and Serial1 on Arduino Due)
 const byte clockPin = 10;
 const byte latchPin = 11;
 const byte dataPin = 12;
 const byte ledPin = 13;
-const byte buttonMap[] = {8, 0, 4, 5, 6, 7, 3}; // Remapped codes from the SNES controller's native bit scheme (see comment above)
 unsigned long debounceTimer = 20; // Debounce timer - inactivates button briefly after a press or release (Milliseconds)
 
 // Variables
@@ -25,7 +26,7 @@ byte opCode = 0;
 const byte nButtons = sizeof(buttonMap); // Total number of buttons
 boolean buttonState[12] = {true}; // State of each button on the controller (pressed or not). Fixed at size 12 by requirements of controller.
 boolean lastButtonState[12] = {true}; // State of each button before the current read
-byte events[nButtons] = {0}; // List of press or release events captured in the current cycle
+byte events[nButtons*2] = {0}; // List of press or release events captured in the current cycle
 unsigned long debounceStartTime[nButtons] = {0};
 boolean inDebounce[nButtons] = {false};
 byte nEvents = 0; // Number of events captured in the current cycle
@@ -102,8 +103,21 @@ void refreshController() {
 void returnModuleInfo() {
   Serial1COM.writeByte(65); // Acknowledge
   Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
-  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  Serial1COM.writeByte(sizeof(moduleName)-1);
   Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  Serial1COM.writeByte(1); // 1 if more info follows, 0 if not
+  Serial1COM.writeByte('#'); // Op code for: Number of behavior events this module can generate
+  Serial1COM.writeByte(24); // 12 buttons, 2 states each
+  Serial1COM.writeByte(1); // 1 if more info follows, 0 if not
+  Serial1COM.writeByte('E'); // Op code for: Behavior event names
+  Serial1COM.writeByte(nEventNames);
+  for (int i = 0; i < nEventNames; i++) { // Once for each event name
+    Serial1COM.writeByte(strlen(eventNames[i])); // Send event name length
+    for (int j = 0; j < strlen(eventNames[i]); j++) { // Once for each character in this event name
+      Serial1COM.writeByte(*(eventNames[i]+j)); // Send the character
+    }
+  }
+  Serial1COM.writeByte(0); // 1 if more info follows, 0 if not
 }
 
 void digitalWriteDirect(int PIN, boolean val){

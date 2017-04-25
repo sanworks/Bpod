@@ -220,24 +220,35 @@ classdef BpodObject < handle
             while (Found == 0) && (iPort <= nPorts)
                 ThisPort = Ports{iPort};
                 disp(['Trying port: ' ThisPort])
+                Connected = 0;
                 if ForceJava
-                    obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200, 'Java');
+                    try
+                        obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200, 'Java');
+                        Connected = 1;
+                    catch
+                    end
                 else
-                    obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200);
+                    try
+                        obj.SerialPort = ArCOMObject_Bpod(ThisPort, 115200);
+                        Connected = 1;
+                    catch
+                    end
                 end
-                obj.SerialPort.write('6', 'uint8');
-                pause(.1)
-                if obj.SerialPort.bytesAvailable > 0
-                    Reply = obj.SerialPort.read(1, 'uint8');
-                    if Reply == '5'
-                        Found = 1;
-                        thisPortIndex = iPort;
-                        obj.Status.SerialPortName = ThisPort;
+                if Connected
+                    obj.SerialPort.write('6', 'uint8');
+                    pause(.1)
+                    if obj.SerialPort.bytesAvailable > 0
+                        Reply = obj.SerialPort.read(1, 'uint8');
+                        if Reply == '5'
+                            Found = 1;
+                            thisPortIndex = iPort;
+                            obj.Status.SerialPortName = ThisPort;
+                        else
+                            obj.SerialPort.delete;
+                        end
                     else
                         obj.SerialPort.delete;
                     end
-                else
-                    obj.SerialPort.delete;
                 end
                 iPort = iPort + 1;
             end
@@ -257,7 +268,6 @@ classdef BpodObject < handle
                 obj.StateMachineInfo.MaxStates = 256;
                 obj.HW.CyclePeriod = 100;
                 obj.HW.CycleFrequency = 10000;
-                obj.HW.n.EventsPerSerialChannel = 10;
                 obj.HW.n.GlobalTimers = 5;
                 obj.HW.n.GlobalCounters  = 5;
                 obj.HW.n.Conditions  = 5;
@@ -277,8 +287,10 @@ classdef BpodObject < handle
                 obj.SerialPort.write('F', 'uint8');
                 obj.FirmwareBuild = obj.SerialPort.read(1, 'uint16');
                 obj.MachineType = obj.SerialPort.read(1, 'uint16');
-                obsoleteFirmware = [7 8 9 10];
+                obsoleteFirmware = [7 8 9 10 11];
                 if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
+                    obj.SerialPort.write('Z');
+                    obj.SerialPort = []; % Trigger the ArCOM port's destructor function (closes and releases port)
                     error('Old firmware detected. Please update Bpod firmware, restart MATLAB and try again.')
                 end
                 % Request hardware description
@@ -287,7 +299,7 @@ classdef BpodObject < handle
                 obj.StateMachineInfo.MaxStates = obj.SerialPort.read(1, 'uint16');
                 obj.HW.CyclePeriod = double(obj.SerialPort.read(1, 'uint16'));
                 obj.HW.CycleFrequency = 1000000/double(obj.HW.CyclePeriod);
-                obj.HW.n.EventsPerSerialChannel = double(obj.SerialPort.read(1, 'uint8'));
+                obj.HW.n.MaxSerialEvents = double(obj.SerialPort.read(1, 'uint8'));
                 obj.HW.n.GlobalTimers = double(obj.SerialPort.read(1, 'uint8'));
                 obj.HW.n.GlobalCounters  = double(obj.SerialPort.read(1, 'uint8'));
                 obj.HW.n.Conditions  = double(obj.SerialPort.read(1, 'uint8'));
@@ -331,7 +343,8 @@ classdef BpodObject < handle
             obj.HW.n.UartSerialChannels = sum(obj.HW.Outputs == 'U');
             obj.HW.n.USBChannels = sum(obj.HW.Outputs == 'X');
             obj.HW.n.SerialChannels = obj.HW.n.USBChannels + obj.HW.n.UartSerialChannels;
-            obj.HW.EventTypes = [repmat('S', 1, obj.HW.n.SerialChannels*obj.HW.n.EventsPerSerialChannel) repmat('I', 1, obj.HW.n.DigitalInputs*2) repmat('T', 1, obj.HW.n.GlobalTimers*2 ) repmat('+', 1, obj.HW.n.GlobalCounters)  repmat('C', 1, obj.HW.n.Conditions) repmat('J', 1, obj.HW.n.SerialChannels) 'U'];
+            obj.HW.n.SoftCodes = 10;
+            obj.HW.EventTypes = [repmat('S', 1, obj.HW.n.MaxSerialEvents) repmat('I', 1, obj.HW.n.DigitalInputs*2) repmat('T', 1, obj.HW.n.GlobalTimers*2 ) repmat('+', 1, obj.HW.n.GlobalCounters)  repmat('C', 1, obj.HW.n.Conditions) repmat('J', 1, obj.HW.n.SerialChannels) 'U'];
             obj.HW.EventKey = 'S = serial, I = i/o, T = global timer, + = global counter, C = condition, J = jump, U = state timer';
             obj.HW.IOEventStartposition = find(obj.HW.EventTypes == 'I', 1);
             obj.HW.GlobalTimerStartposition = find(obj.HW.EventTypes == 'T', 1);
@@ -379,15 +392,18 @@ classdef BpodObject < handle
                 obj.Modules.Connected = zeros(1,nModules);
                 obj.Modules.Name = cell(1,nModules);
                 obj.Modules.FirmwareVersion = zeros(1,nModules);
+                obj.Modules.nSerialEvents = ones(1,nModules)*(floor(obj.HW.n.MaxSerialEvents/obj.HW.n.SerialChannels));
+                obj.Modules.EventNames = cell(1,nModules);
                 obj.SerialPort.write('M', 'uint8');
                 pause(.1);
                 messageLength = obj.SerialPort.bytesAvailable;
+                moduleEventsRequested = zeros(1,obj.HW.n.UartSerialChannels);
                 if messageLength > 1
                     for i = 1:nModules
                         obj.Modules.Connected(i) = obj.SerialPort.read(1, 'uint8');
                         if obj.Modules.Connected(i) == 1
                             obj.Modules.FirmwareVersion(i) = obj.SerialPort.read(1, 'uint32');
-                            nBytes = obj.SerialPort.read(1, 'uint32');
+                            nBytes = obj.SerialPort.read(1, 'uint8');
                             NameString = obj.SerialPort.read(nBytes, 'char');
                             SameModuleCount = 0;
                             for j = 1:nModules
@@ -396,7 +412,61 @@ classdef BpodObject < handle
                                 end
                             end
                             obj.Modules.Name{i} = [NameString num2str(SameModuleCount+1)];
+                            moreInfoFollows = obj.SerialPort.read(1, 'uint8');
+                            if moreInfoFollows
+                                while moreInfoFollows
+                                    paramType = obj.SerialPort.read(1, 'uint8');
+                                    switch paramType
+                                        case '#' % Number of events requested by module
+                                            moduleEventsRequested(i) = obj.SerialPort.read(1, 'uint8');
+                                        case 'E' % Strings to replace default event names (e.g. ModuleName1_1)
+                                            nStrings = obj.SerialPort.read(1, 'uint8');
+                                            obj.Modules.EventNames{i} = cell(1,nStrings);
+                                            for j = 1:nStrings
+                                                nCharInThisString = obj.SerialPort.read(1, 'uint8');
+                                                obj.Modules.EventNames{i}{j} = obj.SerialPort.read(nCharInThisString, 'char');
+                                            end
+                                    end
+                                    moreInfoFollows = obj.SerialPort.read(1, 'uint8');
+                                end
+                            end
                         end
+                    end
+                    nEventsRequested = sum(moduleEventsRequested)+obj.HW.n.SoftCodes;
+                    if nEventsRequested > obj.HW.n.MaxSerialEvents
+                        error(['Error: modules requested more serial events ' num2str(nEventsRequested) ' than the current state machine can support ' num2str(obj.HW.n.MaxSerialEvents) '. Please reconfigure modules.'])
+                    end
+                    for i = 1:nModules
+                        if obj.Modules.Connected(i) == 1
+                            if moduleEventsRequested(i) > obj.Modules.nSerialEvents(i)
+                                nToReassign = moduleEventsRequested(i) - obj.Modules.nSerialEvents(i);
+                                obj.Modules.nSerialEvents(i) = moduleEventsRequested(i); % Assign events
+                            else
+                                nToReassign = 0;
+                            end
+                            Pos = nModules;
+                            while nToReassign > 0
+                                if obj.Modules.nSerialEvents(Pos) > 0 && obj.Modules.Connected(Pos) == 0
+                                    if obj.Modules.nSerialEvents(Pos) >= nToReassign
+                                        obj.Modules.nSerialEvents(Pos) = obj.Modules.nSerialEvents(Pos) - nToReassign;
+                                        nToReassign = 0;
+                                    else
+                                        nToReassign = nToReassign - obj.Modules.nSerialEvents(Pos);
+                                        obj.Modules.nSerialEvents(Pos) = 0;
+                                    end
+                                end
+                                Pos = Pos - 1;
+                                if Pos == 0
+                                    error(['Error: modules requested more serial events ' num2str(nEventsRequested) ' than the current state machine can support ' num2str(obj.HW.n.MaxSerialEvents) '. Please reconfigure modules.'])
+                                end
+                            end
+                        end
+                    end
+                    obj.HW.n.SoftCodes = obj.HW.n.MaxSerialEvents-sum(obj.Modules.nSerialEvents);
+                    obj.SerialPort.write(['%' obj.Modules.nSerialEvents obj.HW.n.SoftCodes], 'uint8');
+                    Confirmed = obj.SerialPort.read(1, 'uint8');
+                    if Confirmed ~= 1
+                        error('Error: State machine did not confirm module event reallocation');
                     end
                 else
                     error('Error requesting module information: state machine did not return enough data.')
@@ -410,7 +480,7 @@ classdef BpodObject < handle
         end
         function obj = SetupStateMachine(obj)
             % Set up event and output names
-            EventNames = cell(1,obj.HW.n.SerialChannels*(obj.HW.n.EventsPerSerialChannel+1) + obj.HW.n.DigitalInputs*2 + 16);
+            EventNames = cell(1,sum(obj.Modules.nSerialEvents) + obj.HW.n.SoftCodes + obj.HW.n.DigitalInputs*2 + 16);
             InputChannelNames = cell(1,obj.HW.n.Inputs);
             Pos = 1;
             nUSB = 0;
@@ -427,8 +497,18 @@ classdef BpodObject < handle
                         else
                             InputChannelNames{nChannels} = ['Serial' num2str(i)];
                         end
-                        for j = 1:obj.HW.n.EventsPerSerialChannel
-                            EventNames{Pos} = [InputChannelNames{nChannels} '_' num2str(j)]; Pos = Pos + 1;
+                        for j = 1:obj.Modules.nSerialEvents(i)
+                            Assigned = 0;
+                            if ~isempty(obj.Modules.EventNames{i})
+                                if j <= length(obj.Modules.EventNames{i})
+                                    ThisEventName = [InputChannelNames{nChannels} '_' obj.Modules.EventNames{i}{j}];
+                                   Assigned = 1;
+                                end
+                            end
+                            if ~Assigned
+                                ThisEventName = [InputChannelNames{nChannels} '_' num2str(j)]; 
+                            end
+                            EventNames{Pos} = ThisEventName; Pos = Pos + 1;
                         end
                     case 'X'
                         if nUSB == 0
@@ -436,8 +516,13 @@ classdef BpodObject < handle
                         end
                         nChannels = nChannels + 1; nUSB = nUSB + 1;
                         InputChannelNames{nChannels} = ['USB' num2str(i)];
-                        for j = 1:obj.HW.n.EventsPerSerialChannel
+                        for j = 1:obj.HW.n.SoftCodes;
                             EventNames{Pos} = ['SoftCode' num2str(j)]; Pos = Pos + 1;
+                        end
+                        if Pos < obj.HW.n.MaxSerialEvents
+                            for j = obj.HW.n.SoftCodes+1:obj.HW.n.SoftCodes+(obj.HW.n.MaxSerialEvents-Pos)+1
+                               EventNames{Pos} = ['SoftCode' num2str(j)]; Pos = Pos + 1; 
+                            end
                         end
                     case 'P'
                         if nPorts == 0
@@ -484,6 +569,13 @@ classdef BpodObject < handle
             EventNames{Pos} = 'Tup';
             obj.StateMachineInfo.EventNames = EventNames;
             obj.StateMachineInfo.InputChannelNames = InputChannelNames;
+            obj.HW.StateTimerPosition = Pos;
+            
+            obj.HW.IOEventStartposition = find(obj.HW.EventTypes == 'I', 1);
+            obj.HW.GlobalTimerStartposition = find(obj.HW.EventTypes == 'T', 1);
+            obj.HW.GlobalCounterStartposition = find(obj.HW.EventTypes == '+', 1);
+            obj.HW.ConditionStartposition = find(obj.HW.EventTypes == 'C', 1);
+            obj.HW.StateTimerPosition = find(obj.HW.EventTypes == 'U');
             
             OutputChannelNames = cell(1,obj.HW.n.Outputs + 3);
             Pos = 0;

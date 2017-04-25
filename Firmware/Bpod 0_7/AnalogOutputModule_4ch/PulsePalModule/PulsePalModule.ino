@@ -794,6 +794,7 @@ void zeroDAC() {
 void returnModuleInfo() {
   Serial1COM.writeByte(65); // Acknowledge
   Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
-  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  Serial1COM.writeByte(sizeof(moduleName)-1); // Length of module name
   Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  Serial1COM.writeByte(0); // 1 if more info follows, 0 if not
 }

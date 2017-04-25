@@ -18,88 +18,91 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Intended to run on Arduino Due
-// Rotary Encoder Connections:
-// Brown -> 3.3V
-// Thick black / Shield -> GND
-// Blue -> GND
-// Black -> A0
-// White -> A1
-// Orange -> A2
+
+// The rotary encoder module, powered by Teensy 3.5, interfaces Bpod with a 1024-position rotary encoder: Yumo E6B2-CWZ3E
+// The serial interface allows the user to set position thresholds, which generate Bpod events when crossed.
+// The 'T' command starts a trial, by setting the current position to '512' (of 1024).
+// Position data points and corresponding timestamps are logged until a threshold is reached.
+// The 'E' command exits a trial, before a threshold is reached.
+// The MATLAB interface can then retrieve the last trial's position log, before starting the next trial.
+// The MATLAB can also stream the current position to a plot, for diagnostics.
+//
+// Future versions of this software will log position to Teensy's microSD card (currently logged to sRAM memory).
+// With effectively no memory limit, the firmware will allow continuous recording to the card for an entire behavior session.
+// The board's exposed I2C pins will be configured to log external events with position data: either incoming I2C messages or TTL pulses.
+// The firmware will also be configured to calculate speed online (for treadmill assays), and speed thresholds can trigger events.
+// The number of programmable thresholds will be larger than 2, limited by sRAM memory.
 
 #include "ArCOM.h"
 #define SERIAL_TX_BUFFER_SIZE 256
 #define SERIAL_RX_BUFFER_SIZE 256
 ArCOM myUSB(SerialUSB); // USB is an ArCOM object. ArCOM wraps Arduino's SerialUSB interface, to
-ArCOM Serial1COM(Serial); // UART serial port
+ArCOM StateMachineCOM(Serial3); // UART serial port
+ArCOM InputStreamCOM(Serial2); // UART serial port
 // simplify moving data types between Arduino and MATLAB/GNU Octave.
 
 // Module setup
 unsigned long FirmwareVersion = 1;
-char moduleName[] = "ChoiceWheel"; // Name of module for manual override UI and state machine assembler
+char moduleName[] = "RotaryEncoder"; // Name of module for manual override UI and state machine assembler
+char* eventNames[] = {"L", "R"}; // Left and right threshold crossings (with respect to position at trial start).
+byte nEventNames = (sizeof(eventNames)/sizeof(char *));
 
 // Hardware setup
-byte EncoderPinA = A0;
-byte EncoderPinB = A1;
+const byte EncoderPinA = 35;
+const byte EncoderPinB = 36;
+const byte EncoderPinZ = 37;
 
 // Parameters
 unsigned short leftThreshold = 412; // in range 0-1024, corresponding to 0-360 degrees
 unsigned short rightThreshold = 612; // in range 0-1024, corresponding to 0-360 degrees
-unsigned long timeout = 5000; // in ms
-unsigned long preTrialIdleTime = 1000; // Time the ball must be idle to start a trial in ms
-unsigned long preTrialDuration = 0; // Actual time animal spent moving ball before a trial could start
-unsigned short idleTimeMotionGrace = 10; // During pre-trial idle, moving this distance in either direction resets the idle timer
 
 // State variables
-boolean isStreaming = 0; // If currently streaming position and time data
-boolean isLogging = 0; // If currently logging position and time to RAM memory
-boolean inPreTrial = 0; // If currently waiting for ball to idle for idleTime2Start ms before trial start
-boolean inTrial = 0; // If currently in a behavior trial
-boolean trialFinished = 0; // If trial end criteria were met
+boolean isStreaming = false; // If currently streaming position and time data
+boolean isLogging = false; // If currently logging position and time to RAM memory
+boolean inTrial = false; // If currently in a trial
 int EncoderPos = 0; // Current position of the rotary encoder
 
 // Program variables
 byte opCode = 0;
 byte param = 0;
+boolean trialFinished = 0;
+byte terminatingEvent = 0;
 boolean EncoderPinAValue = 0;
 boolean EncoderPinALastValue = 0;
 boolean EncoderPinBValue = 0;
 boolean posChange = 0;
 word EncoderPos16Bit =  0;
-unsigned long timeLog[5000] = {0};
-unsigned short posLog[5000] = {0};
+const int dataMax = 10000;
+unsigned long timeLog[dataMax] = {0};
+unsigned short posLog[dataMax] = {0};
 unsigned long choiceTime = 0;
 unsigned int dataPos = 0;
-word dataMax = 10000;
+
 unsigned long startTime = 0;
 unsigned long currentTime = 0;
 unsigned long timeFromStart = 0;
-byte terminatingEvent = 0;
-unsigned short idleTimeMotionGraceLow = 512-idleTimeMotionGrace;
-unsigned short idleTimeMotionGraceHigh = 512+idleTimeMotionGrace;
 
 void setup() {
   // put your setup code here, to run once:
   SerialUSB.begin(115200);
-  Serial.begin(1312500);
+  Serial3.begin(1312500);
+  Serial2.begin(1312500);
   pinMode(EncoderPinA, INPUT);
   pinMode (EncoderPinB, INPUT);
+  pinMode(13, OUTPUT);
+  digitalWrite(13, HIGH);
 }
 
 void loop() {
   currentTime = millis();
-  if (Serial1COM.available() > 0) {
-    opCode = Serial1COM.readByte();
+  if (StateMachineCOM.available() > 0) {
+    opCode = StateMachineCOM.readByte();
     switch (opCode) {
       case 255: // Return module name and info
         returnModuleInfo();
       break;
       case 'T':
-        inPreTrial = true;
-        EncoderPos = 512;
-        dataPos = 0;
-        preTrialDuration = 0;
-        startTime = currentTime;
+        startTrial();
       break;
     }
   }
@@ -115,11 +118,11 @@ void loop() {
         startTime = currentTime;
       break;
       case 'T': // Start trial
-        inPreTrial = true;
-        EncoderPos = 512;
-        dataPos = 0;
-        preTrialDuration = 0;
-        startTime = currentTime;
+        startTrial();
+      break;
+      case 'E': // End trial
+        inTrial = false;
+        isLogging = false;
       break;
       case 'P': // Program parameters (1 at a time)
         param = myUSB.readByte();
@@ -130,35 +133,25 @@ void loop() {
           case 'R':  
             rightThreshold = myUSB.readUint16();
           break;
-          case 'I':
-            preTrialIdleTime = myUSB.readUint32();
-          break;
-          case 'G':
-            idleTimeMotionGrace = myUSB.readUint16();
-            idleTimeMotionGraceLow = 512-idleTimeMotionGrace;
-            idleTimeMotionGraceHigh = 512+idleTimeMotionGrace;
-          break;
-          case 'T':
-            timeout = myUSB.readUint32();
-          break;
         }
       break;
       case 'A': // Program parameters (all at once)
-        idleTimeMotionGrace = myUSB.readUint16();
         leftThreshold = myUSB.readUint16();
         rightThreshold = myUSB.readUint16();
-        preTrialIdleTime = myUSB.readUint32();
-        timeout = myUSB.readUint32();
         myUSB.writeByte(1);
-        idleTimeMotionGraceLow = 512-idleTimeMotionGrace;
-        idleTimeMotionGraceHigh = 512+idleTimeMotionGrace;
       break;
       case 'R': // Return data
         isLogging = false;
-        myUSB.writeUint16(dataPos);
-        myUSB.writeUint16Array(posLog,dataPos); 
-        myUSB.writeUint32Array(timeLog,dataPos); 
-        dataPos = 0;
+        if (trialFinished) {
+          trialFinished = false;
+          myUSB.writeUint16(dataPos);
+          myUSB.writeUint16Array(posLog,dataPos); 
+          myUSB.writeUint32Array(timeLog,dataPos); 
+          dataPos = 0;
+        } else {
+          dataPos = 0;
+          myUSB.writeUint16(dataPos);
+        }
       break;
       case 'Q': // Return current encoder position
         myUSB.writeUint16(EncoderPos);
@@ -167,7 +160,6 @@ void loop() {
         isStreaming = false;
         isLogging = false;
         inTrial = false;
-        inPreTrial = false;
         dataPos = 0;
         EncoderPos = 512;
       break;
@@ -198,18 +190,13 @@ void loop() {
       if (EncoderPos <= leftThreshold) {
         inTrial = false;
         terminatingEvent = 1;
-        Serial1COM.writeByte(terminatingEvent);
+        StateMachineCOM.writeByte(terminatingEvent);
       }
       if (EncoderPos >= rightThreshold) {
         inTrial = false;
         terminatingEvent = 2;
-        Serial1COM.writeByte(terminatingEvent);
+        StateMachineCOM.writeByte(terminatingEvent);
       }
-    }
-    if (timeFromStart >= timeout) {
-      inTrial = false;
-      terminatingEvent = 3;
-      Serial1COM.writeByte(terminatingEvent);
     }
     if (!inTrial) {
       startTime = currentTime;
@@ -221,36 +208,7 @@ void loop() {
       trialFinished = true;
       isLogging = false; // Stop logging
     }
-  } else if (trialFinished) {
-      trialFinished = false;
-      myUSB.writeUint16(dataPos); 
-      myUSB.writeByte(terminatingEvent); 
-      myUSB.writeUint32(preTrialDuration); // Return data
-      myUSB.writeUint16Array(posLog,dataPos); 
-      myUSB.writeUint32Array(timeLog,dataPos);
-      dataPos = 0;
-
-  } else if (inPreTrial) {
-    if (EncoderPos <= idleTimeMotionGraceLow) {
-      preTrialDuration += timeFromStart;
-      startTime = currentTime;
-      EncoderPos = 512;
-    }
-    if (EncoderPos >= idleTimeMotionGraceHigh) {
-      preTrialDuration += timeFromStart;
-      startTime = currentTime;
-      EncoderPos = 512;
-    }
-    if (timeFromStart >= preTrialIdleTime) {
-      inTrial = true;
-      isLogging = true;
-      inPreTrial = false;
-      startTime = currentTime;
-      preTrialDuration += timeFromStart;
-      timeFromStart = 0;
-      Serial1COM.writeByte(4);
-    }
-  }
+  } 
   if (isLogging) {
     if (posChange) { // If the position changed since previous loop
       posChange = false;
@@ -265,8 +223,31 @@ void loop() {
 }
 
 void returnModuleInfo() {
-  Serial1COM.writeByte(65); // Acknowledge
-  Serial1COM.writeUint32(FirmwareVersion); // 4-byte firmware version
-  Serial1COM.writeUint32(sizeof(moduleName)-1); // Length of module name
-  Serial1COM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  StateMachineCOM.writeByte(65); // Acknowledge
+  StateMachineCOM.writeUint32(FirmwareVersion); // 4-byte firmware version
+  StateMachineCOM.writeByte(sizeof(moduleName)-1); // Length of module name
+  StateMachineCOM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  StateMachineCOM.writeByte(1); // 1 if more info follows, 0 if not
+  StateMachineCOM.writeByte('#'); // Op code for: Number of behavior events this module can generate
+  StateMachineCOM.writeByte(2); // 2 thresholds
+  StateMachineCOM.writeByte(1); // 1 if more info follows, 0 if not
+  StateMachineCOM.writeByte('E'); // Op code for: Behavior event names
+  StateMachineCOM.writeByte(nEventNames);
+  for (int i = 0; i < nEventNames; i++) { // Once for each event name
+    StateMachineCOM.writeByte(strlen(eventNames[i])); // Send event name length
+    for (int j = 0; j < strlen(eventNames[i]); j++) { // Once for each character in this event name
+      StateMachineCOM.writeByte(*(eventNames[i]+j)); // Send the character
+    }
+  }
+  StateMachineCOM.writeByte(0); // 1 if more info follows, 0 if not
 }
+
+void startTrial() {
+  EncoderPos = 512;
+  dataPos = 0;
+  startTime = currentTime;
+  inTrial = true;
+  isLogging = true;
+  timeFromStart = 0;
+}
+

@@ -106,8 +106,9 @@ void loop() {
 void returnModuleInfo() { // Return module name and firmware version
   myUART.writeByte(65); // Acknowledge
   myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
-  myUART.writeUint32(sizeof(moduleName)-1); // Length of module name
+  myUART.writeByte(sizeof(moduleName)-1); // Length of module name
   myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  myUART.writeByte(0); // 1 if more info follows, 0 if not
 }
 byte ascii2Num(byte value) { // Convert ascii numeric channels to numeric channels
   if ((value > 48) && (value < 57)) {

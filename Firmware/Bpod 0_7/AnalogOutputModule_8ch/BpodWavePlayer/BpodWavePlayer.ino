@@ -35,9 +35,9 @@ SdFatSdioEX SD;
 char moduleName[] = "WavePlayer"; // Name of module for manual override UI and state machine assembler
 
 // Parameters
-const byte nChannels = 4; // Number of analog output channels
+const byte nChannels = 8; // Number of analog output channels
 const int maxWaves = 64; // Maximum number of waveforms (used to set up data buffers and to ensure data file is large enough)
-const unsigned long bufSize = 1280; // Buffer size (in samples). Larger buffers prevent underruns, but take up memory.
+const unsigned long bufSize = 640; // Buffer size (in samples). Larger buffers prevent underruns, but take up memory.
                                     // Each wave in MaxWaves is allocated 1 buffer worth of sRAM (Teensy 3.6 total sRAM = 256k)
 const unsigned long maxWaveSize = 1000000; // Maximum number of samples per waveform
 const byte maxTriggerProfiles = 64; // Maximum number of trigger profiles (vectors of waves to play on each channel for different trigger bytes) 
@@ -48,13 +48,16 @@ union {
 float timerPeriod_Idle = 20; // Default hardware timer period while idle (no playback, awaiting commands; determines playback latency)
 
 // Pin definitions
-const byte RefEnable = 32; // External 3V reference enable pin
-const byte SyncPin=14; // AD5754 Pin 7 (Sync)
-const byte LDACPin=39; // AD5754 Pin 10 (LDAC)
+const byte RefEnable1 = 31; // External 3V reference enable pin
+const byte SyncPin1=34; // AD5754 Pin 7 (Sync)
+const byte LDACPin1=32; // AD5754 Pin 10 (LDAC)
+const byte RefEnable2 = 33; // External 3V reference enable pin
+const byte SyncPin2=14; // AD5754 Pin 7 (Sync)
+const byte LDACPin2=39; // AD5754 Pin 10 (LDAC)
 
 // System objects
 SPISettings DACSettings(30000000, MSBFIRST, SPI_MODE2); // Settings for DAC
-IntervalTimer hardwareTimer; // Hardware timer to create even sampling
+IntervalTimer hardwareTimer; // Hardware timer to ensure even sampling
 File Wave0; // File on microSD card, to store waveform data
 
 // Playback variables
@@ -81,7 +84,7 @@ byte loopMode[nChannels] = {0}; // (for each channel) Loops waveform until loopD
 unsigned long loopDuration[nChannels] = {0}; // Duration of loop for loop mode (in samples)
 unsigned long channelTime[nChannels] = {0}; // Time (in samples) since looping channel was triggered (used to compute looped playback end)
 byte waveIndex = 0; // Index of current waveform (1-maxWaves; maxWaves is in the "parameters" section above)
-byte channelIndex = 0; // Index of current output channel (1-4)
+byte channelIndex = 0; // Index of current output channel (1-8)
 const unsigned long maxWaveSizeBytes = maxWaveSize*2; // Maximum size of a waveform in bytes (maxWaveSize is in the "parameters" section above)
 const int bufSizeBytes = bufSize*2; // Size of the buffer in bytes (bufSizeBytes is in the "parameters" section above)
 byte currentBuffer[nChannels] = {0}; // Current buffer for each channel (a double buffering scheme allows one to be filled while the other is read)
@@ -99,7 +102,7 @@ byte countdown2Play[nChannels] = {0}; // Set to 2 if a channel has been triggere
 const int BpodSerialBaudRate = 1312500; // Communication rate for Bpod UART channel
 byte dacBuffer[3] = {0}; // Holds bytes to be written to the DAC
 union {
-    byte byteArray[8];
+    byte byteArray[nChannels*2];
     uint16_t uint16[nChannels];
 } dacValue; // 16-Bit code of current sample on DAC output channels. A union type allows instant conversion between bytes and 16-bit ints
 union {
@@ -138,6 +141,38 @@ union {
     byte byteArray[bufSizeBytes];
     uint16_t uint16[bufSize];
 } channel4BufferB;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel5BufferA;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel5BufferB;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel6BufferA;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel6BufferB;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel7BufferA;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel7BufferB;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel8BufferA;
+union {
+    byte byteArray[bufSizeBytes];
+    uint16_t uint16[bufSize];
+} channel8BufferB;
 
 // Wrap serial interfaces
 ArCOM USBCOM(Serial); // Creates an ArCOM object called USBCOM, wrapping Serial (for Teensy 3.6)
@@ -153,13 +188,18 @@ unsigned long partialReadSize = 0;
 void setup() {
   Serial2.begin(1312500);
   Serial3.begin(1312500);
-  pinMode(RefEnable, OUTPUT); // Reference enable pin sets the external reference IC output to 3V (RefEnable=high) or high impedence (RefEnable = low)
-  digitalWrite(RefEnable, LOW); // Disabling external reference IC allows other voltage ranges with DAC internal reference
-  pinMode(SyncPin, OUTPUT); // Configure SPI bus pins as outputs
-  pinMode(LDACPin, OUTPUT);
+  pinMode(RefEnable1, OUTPUT); // Reference enable pin sets the external reference IC output to 3V (RefEnable=high) or high impedence (RefEnable = low)
+  digitalWrite(RefEnable1, LOW); // Disabling external reference IC allows other voltage ranges with DAC internal reference
+  pinMode(SyncPin1, OUTPUT); // Configure SPI bus pins as outputs
+  pinMode(LDACPin1, OUTPUT);
+  pinMode(RefEnable2, OUTPUT); // Reference enable pin sets the external reference IC output to 3V (RefEnable=high) or high impedence (RefEnable = low)
+  digitalWrite(RefEnable2, LOW); // Disabling external reference IC allows other voltage ranges with DAC internal reference
+  pinMode(SyncPin2, OUTPUT); // Configure SPI bus pins as outputs
+  pinMode(LDACPin2, OUTPUT);
   SPI.begin(); // Initialize SPI interface
   SPI.beginTransaction(DACSettings); // Set SPI parameters to DAC speed and bit order
-  digitalWrite(LDACPin, LOW); // Ensure DAC load pin is at default level (low)
+  digitalWrite(LDACPin1, LOW); // Ensure DAC load pin is at default level (low)
+  digitalWrite(LDACPin2, LOW); // Ensure DAC load pin is at default level (low)
   ProgramDAC(16, 0, 31); // Power up all channels + internal ref)
   ProgramDAC(12, 0, 3); // Set output range to +/- 5V
   zeroDAC(); // Set all DAC channels to 0V
@@ -201,6 +241,34 @@ void loop() { // loop runs in parallel with hardware timer, at lower interrupt p
               Wave0.read(channel4BufferA.byteArray, bufSizeBytes);
             } else {
               Wave0.read(channel4BufferB.byteArray, bufSizeBytes);
+            }
+          break;
+          case 4:
+            if (currentBuffer[i] == 1) {
+              Wave0.read(channel5BufferA.byteArray, bufSizeBytes);
+            } else {
+              Wave0.read(channel5BufferB.byteArray, bufSizeBytes);
+            }
+          break;
+          case 5:
+            if (currentBuffer[i] == 1) {
+              Wave0.read(channel6BufferA.byteArray, bufSizeBytes);
+            } else {
+              Wave0.read(channel6BufferB.byteArray, bufSizeBytes);
+            }
+          break;
+          case 6:
+            if (currentBuffer[i] == 1) {
+              Wave0.read(channel7BufferA.byteArray, bufSizeBytes);
+            } else {
+              Wave0.read(channel7BufferB.byteArray, bufSizeBytes);
+            }
+          break;
+          case 7:
+            if (currentBuffer[i] == 1) {
+              Wave0.read(channel8BufferA.byteArray, bufSizeBytes);
+            } else {
+              Wave0.read(channel8BufferB.byteArray, bufSizeBytes);
             }
           break;
         }
@@ -310,38 +378,44 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
           rangeIndex = USBCOM.readByte(); // rangeIndex 0 = '0V:5V', 1 = '0V:10V', 2 = '0V:12V', 3 = '-5V:5V', 4 = '-10V:10V', 5 = '-12V:12V'
           switch(rangeIndex) {
             case 0:
-              digitalWrite(RefEnable, LOW); // Disable external reference IC
+              digitalWrite(RefEnable1, LOW); // Disable external reference IC
+              digitalWrite(RefEnable2, LOW);
               ProgramDAC(16, 0, 31); // Power up all channels + internal ref)
               ProgramDAC(12, 0, 0); // Set output range to 0-5V
               DACBits_ZeroVolts = 0; // Update 0V bit code
             break;
             case 1:
-              digitalWrite(RefEnable, LOW); // Disable external reference IC
+              digitalWrite(RefEnable1, LOW); // Disable external reference IC
+              digitalWrite(RefEnable2, LOW);
               ProgramDAC(16, 0, 31); // Power up all channels + internal ref)
               ProgramDAC(12, 0, 1); // Set output range to 0-10V
               DACBits_ZeroVolts = 0; // Update 0V bit code
             break;
             case 2:
               ProgramDAC(16, 0, 15); // Power up all channels without internal reference
-              digitalWrite(RefEnable, HIGH); // Enable external reference IC
+              digitalWrite(RefEnable1, HIGH); // Enable external reference IC
+              digitalWrite(RefEnable2, HIGH);
               ProgramDAC(12, 0, 1); // Set output range to 0-10V (using external ref, this setting = 0-12V)
               DACBits_ZeroVolts = 0; // Update 0V bit code
             break;
             case 3:
-              digitalWrite(RefEnable, LOW); // Disable external reference IC
+              digitalWrite(RefEnable1, LOW); // Disable external reference IC
+              digitalWrite(RefEnable2, LOW);
               ProgramDAC(16, 0, 31); // Power up all channels + internal ref)
               ProgramDAC(12, 0, 3); // Set output range to +/- 5V
               DACBits_ZeroVolts = 32768; // Update 0V bit code
             break;
             case 4:
-              digitalWrite(RefEnable, LOW); // Disable external reference IC
+              digitalWrite(RefEnable1, LOW); // Disable external reference IC
+              digitalWrite(RefEnable2, LOW);
               ProgramDAC(16, 0, 31); // Power up all channels + internal ref)
               ProgramDAC(12, 0, 4); // Set output range to +/- 10V
               DACBits_ZeroVolts = 32768; // Update 0V bit code
             break;
             case 5:
               ProgramDAC(16, 0, 15); // Power up all channels without internal reference
-              digitalWrite(RefEnable, HIGH); // Enable external reference IC
+              digitalWrite(RefEnable1, HIGH); // Enable external reference IC
+              digitalWrite(RefEnable2, HIGH);
               ProgramDAC(12, 0, 4); // Set output range to +/- 10V (using external ref, this setting = +/- 12V)
               DACBits_ZeroVolts = 32768; // Update 0V bit code
             break;
@@ -517,6 +591,34 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
             dacValue.uint16[i] = channel4BufferB.uint16[bufferPos[i]];
           }
           break;
+          case 4:
+          if (currentBuffer[i] == 0) {
+            dacValue.uint16[i] = channel5BufferA.uint16[bufferPos[i]];
+          } else {
+            dacValue.uint16[i] = channel5BufferB.uint16[bufferPos[i]];
+          }
+          break;
+          case 5:
+          if (currentBuffer[i] == 0) {
+            dacValue.uint16[i] = channel6BufferA.uint16[bufferPos[i]];
+          } else {
+            dacValue.uint16[i] = channel6BufferB.uint16[bufferPos[i]];
+          }
+          break;
+          case 6:
+          if (currentBuffer[i] == 0) {
+            dacValue.uint16[i] = channel7BufferA.uint16[bufferPos[i]];
+          } else {
+            dacValue.uint16[i] = channel7BufferB.uint16[bufferPos[i]];
+          }
+          break;
+          case 7:
+          if (currentBuffer[i] == 0) {
+            dacValue.uint16[i] = channel8BufferA.uint16[bufferPos[i]];
+          } else {
+            dacValue.uint16[i] = channel8BufferB.uint16[bufferPos[i]];
+          }
+          break;
         }
       }
       if (preBufferActive[i]) {
@@ -602,50 +704,93 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
 }
 
 void ProgramDAC(byte Data1, byte Data2, byte Data3) {
-  digitalWrite(LDACPin,HIGH);
-  digitalWrite(SyncPin,LOW);
+  digitalWrite(LDACPin1,HIGH);
+  digitalWrite(SyncPin1,LOW);
   SPI.transfer (Data1);
   SPI.transfer (Data2);
   SPI.transfer (Data3);
-  digitalWrite(SyncPin,HIGH);
-  digitalWrite(LDACPin,LOW);
+  digitalWrite(SyncPin1,HIGH);
+  digitalWrite(LDACPin1,LOW);
+  digitalWrite(LDACPin2,HIGH);
+  digitalWrite(SyncPin2,LOW);
+  SPI.transfer (Data1);
+  SPI.transfer (Data2);
+  SPI.transfer (Data3);
+  digitalWrite(SyncPin2,HIGH);
+  digitalWrite(LDACPin2,LOW);
 }
 
 void dacWrite() {
-  digitalWrite(LDACPin,HIGH);
+  digitalWrite(LDACPin1,HIGH);
   if (playing[0]) {
-    digitalWrite(SyncPin,LOW);
+    digitalWrite(SyncPin1,LOW);
     dacBuffer[0] = 3;
     dacBuffer[1] = dacValue.byteArray[1];
     dacBuffer[2] = dacValue.byteArray[0];
     SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin,HIGH);
+    digitalWrite(SyncPin1,HIGH);
   }
   if (playing[1]) {
-    digitalWrite(SyncPin,LOW);
+    digitalWrite(SyncPin1,LOW);
     dacBuffer[0] = 2;
     dacBuffer[1] = dacValue.byteArray[3];
     dacBuffer[2] = dacValue.byteArray[2];
     SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin,HIGH);
+    digitalWrite(SyncPin1,HIGH);
   }
   if (playing[2]) {
-    digitalWrite(SyncPin,LOW);
+    digitalWrite(SyncPin1,LOW);
     dacBuffer[0] = 0;
     dacBuffer[1] = dacValue.byteArray[5];
     dacBuffer[2] = dacValue.byteArray[4];
     SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin,HIGH);
+    digitalWrite(SyncPin1,HIGH);
   }
   if (playing[3]) {
-    digitalWrite(SyncPin,LOW);
+    digitalWrite(SyncPin1,LOW);
     dacBuffer[0] = 1;
     dacBuffer[1] = dacValue.byteArray[7];
     dacBuffer[2] = dacValue.byteArray[6];
     SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin,HIGH); 
+    digitalWrite(SyncPin1,HIGH); 
   }
-  digitalWrite(LDACPin,LOW);
+  //digitalWrite(LDACPin1,LOW);
+
+  digitalWrite(LDACPin2,HIGH);
+  if (playing[4]) {
+    digitalWrite(SyncPin2,LOW);
+    dacBuffer[0] = 3;
+    dacBuffer[1] = dacValue.byteArray[9];
+    dacBuffer[2] = dacValue.byteArray[8];
+    SPI.transfer(dacBuffer,3);
+    digitalWrite(SyncPin2,HIGH);
+  }
+  if (playing[5]) {
+    digitalWrite(SyncPin2,LOW);
+    dacBuffer[0] = 2;
+    dacBuffer[1] = dacValue.byteArray[11];
+    dacBuffer[2] = dacValue.byteArray[10];
+    SPI.transfer(dacBuffer,3);
+    digitalWrite(SyncPin2,HIGH);
+  }
+  if (playing[6]) {
+    digitalWrite(SyncPin2,LOW);
+    dacBuffer[0] = 0;
+    dacBuffer[1] = dacValue.byteArray[13];
+    dacBuffer[2] = dacValue.byteArray[12];
+    SPI.transfer(dacBuffer,3);
+    digitalWrite(SyncPin2,HIGH);
+  }
+  if (playing[7]) {
+    digitalWrite(SyncPin2,LOW);
+    dacBuffer[0] = 1;
+    dacBuffer[1] = dacValue.byteArray[15];
+    dacBuffer[2] = dacValue.byteArray[14];
+    SPI.transfer(dacBuffer,3);
+    digitalWrite(SyncPin2,HIGH); 
+  }
+  digitalWrite(LDACPin1,LOW);
+  digitalWrite(LDACPin2,LOW);
 }
 
 void zeroDAC() {

@@ -273,8 +273,10 @@ classdef BpodWavePlayer < handle
                     obj.maxSimultaneousChannels = 2;
                 elseif sf > 50000
                     obj.maxSimultaneousChannels = 3;
-                else
+                elseif sf > 30000
                     obj.maxSimultaneousChannels = 4;
+                else
+                    obj.maxSimultaneousChannels = 8;
                 end
                 if sum(obj.LoopModeLogic) > 0 % Re-compute loop durations (in units of samples)
                     obj.Port.write(['O' obj.LoopModeLogic], 'uint8', obj.LoopDuration*sf, 'uint32'); % Update loop durations

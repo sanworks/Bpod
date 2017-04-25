@@ -27,7 +27,7 @@ ArCOM myUART(Serial1); // Creates an ArCOM object called myUART, wrapping Serial
 
 // Module setup
 unsigned long FirmwareVersion = 1;
-char moduleName[] = "I2CModule"; // Name of module for manual override UI and state machine assembler
+char moduleName[] = "I2C"; // Name of module for manual override UI and state machine assembler
 
 uint32_t firmwareVer = 1;
 byte opCode = 0; 
@@ -167,6 +167,7 @@ void I2CsendMessage(byte messageIndex) {
 void returnModuleInfo() {
   myUART.writeByte(65); // Acknowledge
   myUART.writeUint32(FirmwareVersion); // 4-byte firmware version
-  myUART.writeUint32(sizeof(moduleName)-1); // Length of module name
+  myUART.writeByte(sizeof(moduleName)-1); // Length of module name
   myUART.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  myUART.writeByte(0); // 1 if more info follows, 0 if not
 }

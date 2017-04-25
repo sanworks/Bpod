@@ -18,7 +18,9 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// This is firmware for the Bpod DDS module, encapsulating the AD9834 DDS IC.
+// NOTE: Load with Arduino 1.8.1 until otherwise notified.
+
+// This is firmware for the Bpod DDS module, powered by Teensy 3.2, encapsulating the AD9834 DDS IC.
 // Amplitude control (menu function 'A') is provided in the range [150mV p2p --- 650mV p2p] by a separate DAC chip: AD5620.
 // The module can output sine or triangle waves (menu function 'W') in frequencies between 1Hz and 100kHz.
 // Frequency (menu function 'F') can be controlled from: (0) USB, (1) the state machine or (2) a separate Bpod module, or any subset of these simultaneously.
@@ -73,9 +75,9 @@ void setup() {
   SPI.beginTransaction(DACSettings);
   pinMode(DACcs, OUTPUT);
   digitalWrite(DACcs, HIGH);
-  pinMode(23, INPUT); // Temporary, due to PCB error
-  frequency = 2000;
+  frequency = 1000;
   myDDS.begin();
+  delay(10);
   myDDS.setFrequency(0, frequency);
   myDDS.setOutputMode(OUTPUT_MODE_SINE); // OUTPUT_MODE_SINE OUTPUT_MODE_TRIANGLE
   dacVal = 0;
@@ -88,7 +90,7 @@ void loop() {
     newOp = true;
     opSource = 0;
   } else if (StateMachineCOM.available() > 0) {
-    //op = StateMachineCOM.readByte();
+    op = StateMachineCOM.readByte();
     newOp = true;
     opSource= 1;
   } else if (ModuleCOM.available() > 0) {
@@ -256,6 +258,7 @@ double expMap(uint16_t input, uint32_t in_min, uint32_t in_max, uint32_t out_min
 void returnModuleInfo() { // Return module name and firmware version
   StateMachineCOM.writeByte(65); // Acknowledge
   StateMachineCOM.writeUint32(FirmwareVersion); // 4-byte firmware version
-  StateMachineCOM.writeUint32(sizeof(moduleName)-1); // Length of module name
+  StateMachineCOM.writeByte(sizeof(moduleName)-1); // Length of module name
   StateMachineCOM.writeCharArray(moduleName, sizeof(moduleName)-1); // Module name
+  StateMachineCOM.writeByte(0); // 1 if more info follows, 0 if not
 }

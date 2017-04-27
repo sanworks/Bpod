@@ -266,6 +266,7 @@ classdef BpodObject < handle
         function obj = Setup(obj)
             if obj.EmulatorMode == 1 % Set up as Bpod 0.7
                 obj.StateMachineInfo.MaxStates = 256;
+                obj.HW.n.MaxSerialEvents = 60;
                 obj.HW.CyclePeriod = 100;
                 obj.HW.CycleFrequency = 10000;
                 obj.HW.n.GlobalTimers = 5;
@@ -282,6 +283,8 @@ classdef BpodObject < handle
                 nModules = sum(obj.HW.Outputs=='U');
                 obj.Modules.Connected = zeros(1,nModules);
                 obj.Modules.Name = cell(1,nModules);
+                obj.Modules.nSerialEvents = ones(1,nModules)*(obj.HW.n.MaxSerialEvents/nModules);
+                obj.Modules.EventNames = cell(1,nModules);
             else
                 % Get firmware version
                 obj.SerialPort.write('F', 'uint8');

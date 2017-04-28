@@ -283,7 +283,7 @@ classdef BpodObject < handle
                 nModules = sum(obj.HW.Outputs=='U');
                 obj.Modules.Connected = zeros(1,nModules);
                 obj.Modules.Name = cell(1,nModules);
-                obj.Modules.nSerialEvents = ones(1,nModules)*(obj.HW.n.MaxSerialEvents/nModules);
+                obj.Modules.nSerialEvents = ones(1,nModules)*(obj.HW.n.MaxSerialEvents/(nModules+1));
                 obj.Modules.EventNames = cell(1,nModules);
             else
                 % Get firmware version
@@ -366,7 +366,7 @@ classdef BpodObject < handle
             obj.HW.Pos.Input_BNC = find(obj.HW.Inputs == 'B', 1);
             obj.HW.Pos.Input_Wire = find(obj.HW.Inputs == 'W', 1);
             obj.HW.Pos.Input_Port = find(obj.HW.Inputs == 'P', 1);
-            obj.HW.Pos.Input_USB = find(obj.HW.Inputs == 'x', 1);
+            obj.HW.Pos.Input_USB = find(obj.HW.Inputs == 'X', 1);
             obj.LoadModules;
             obj.SetupStateMachine;
             obj.BpodSplashScreen(3);

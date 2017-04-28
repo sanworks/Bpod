@@ -30,6 +30,10 @@ classdef TrialManagerObject < handle
     end
     methods
         function obj = TrialManagerObject %Constructor
+            global BpodSystem
+            if BpodSystem.EmulatorMode == 1
+                error('Error: The Bpod emulator does not currently support running state machines with TrialManager.') 
+            end
             obj.Timer = timer('TimerFcn',@(h,e)obj.processLiveEvents(), 'ExecutionMode', 'fixedRate', 'Period', 0.001);
         end
         function startTrial(obj, StateMatrix)

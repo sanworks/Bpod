@@ -116,6 +116,7 @@ classdef BpodObject < handle
             obj.Status.BeingUsed = 0;
             obj.Status.BpodStartTime = 0;
             obj.Status.CurrentProtocolName = '';
+            obj.Status.CurrentSubjectName = '';
             obj.Status.SerialPortName = '';
             obj.Status.NewStateMachineSent = 0;
             obj.Path = struct;
@@ -743,7 +744,8 @@ classdef BpodObject < handle
                     if obj.Modules.Connected(i-1)
                         ThisModuleName = obj.Modules.Name{i-1};
                         UCase = (ThisModuleName > 64 & ThisModuleName < 91);
-                        if sum(UCase) == 2 && length(UCase) > 3
+                        LCase = (ThisModuleName > 96 & ThisModuleName < 123);
+                        if sum(UCase) == 2 && length(UCase) > 3 && sum(LCase) > 0
                             CapPos = find(UCase);
                             NamePart1 = ThisModuleName(1:CapPos(2)-1);
                             NamePart2 = ThisModuleName(CapPos(2):end);

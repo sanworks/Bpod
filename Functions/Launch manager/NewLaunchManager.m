@@ -157,6 +157,7 @@ for x = 3:length(Candidates)
 end
 set(BpodSystem.GUIHandles.SettingsSelector, 'String', SettingsFileNames);
 set(BpodSystem.GUIHandles.SettingsSelector, 'Value', 1);
+BpodSystem.Status.CurrentSubjectName = SelectedName;
 UpdateDataFile(ProtocolName, SelectedName);
 
 function loadProtocols

@@ -763,7 +763,7 @@ classdef BpodObject < handle
                 % Draw tab
                 obj.GUIHandles.PanelButton(i) = uicontrol('Style', 'pushbutton', 'String', FormattedModuleNames{i}, 'Callback', @(h,e)obj.SwitchPanels(i), 'BackgroundColor', [0.37 0.37 0.37], 'Position', [TabPos 272 TabWidth-1 49], 'ForegroundColor', [0.9 0.9 0.9], 'FontSize', 10, 'FontName', 'OCR A STD');
                 TabPos = TabPos + TabWidth;
-                if isempty(strfind(obj.HostOS, 'Linux'))
+                if isempty(strfind(obj.HostOS, 'Linux')) && verLessThan('matlab','9.0')
                     jButton = findjobj(obj.GUIHandles.PanelButton(i));
                     jButton.setBorderPainted(false);
                 end
@@ -818,9 +818,11 @@ classdef BpodObject < handle
                     TabPos = TabPos + TabWidth;
                     line([TabPos-1 TabPos-1], [82 130], 'Color', [0.45 0.45 0.45], 'LineWidth', 5);
                 end
-                for i = 1:obj.HW.n.SerialChannels
-                    jButton = findjobj(obj.GUIHandles.PanelButton(i));
-                    jButton.setBorderPainted(false);
+                if isempty(strfind(obj.HostOS, 'Linux')) && verLessThan('matlab','9.0')
+                    for i = 1:obj.HW.n.SerialChannels
+                        jButton = findjobj(obj.GUIHandles.PanelButton(i));
+                        jButton.setBorderPainted(false);
+                    end
                 end
             end
             obj.GUIHandles.CurrentStateDisplay = uicontrol('Style', 'text', 'String', 'None', 'Position', [12 268 115 20], 'FontWeight', 'bold', 'FontSize', 9);
@@ -912,7 +914,7 @@ classdef BpodObject < handle
                 uistack(obj.GUIHandles.OverridePanel(1),'top');
                 axes(obj.GUIHandles.Console);
                 uistack(obj.GUIHandles.Console,'bottom');
-                if isempty(strfind(obj.HostOS, 'Linux'))
+                if isempty(strfind(obj.HostOS, 'Linux')) && verLessThan('matlab','9.0')
                     for i = 1:obj.HW.n.SerialChannels
                         jButton = findjobj(obj.GUIHandles.PanelButton(i));
                         jButton.setBorderPainted(false);
@@ -1198,7 +1200,7 @@ classdef BpodObject < handle
                 set(obj.GUIHandles.OverridePanel(i), 'Visible', 'off');
             end
             set(obj.GUIHandles.PanelButton(panel), 'BackgroundColor', [0.45 0.45 0.45]);
-            if isempty(strfind(obj.HostOS, 'Linux')) % Fix buttons if not on linux
+            if isempty(strfind(obj.HostOS, 'Linux')) && verLessThan('matlab','9.0') % Fix buttons if not on linux
                 for i = 1:obj.HW.n.SerialChannels
                     jButton = findjobj(obj.GUIHandles.PanelButton(i));
                     jButton.setBorderPainted(false);

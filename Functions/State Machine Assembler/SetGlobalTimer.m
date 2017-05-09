@@ -59,9 +59,8 @@ else % Assume legacy syntax
     Duration = varargin{1};
 end
 
-nTimers = length(sma.GlobalTimers);
-if TimerID > nTimers
-    error(['Error setting global timer#' num2str(TimerID) '. Only ' num2str(nTimers) ' global timers are available.']);
+if TimerID > BpodSystem.HW.n.GlobalTimers
+    error(['Error setting global timer#' num2str(TimerID) '. Only ' num2str(BpodSystem.HW.n.GlobalTimers) ' global timers are available.']);
 end
 sma.GlobalTimers.Duration(TimerID) = Duration;
 OnsetDelay = 0;

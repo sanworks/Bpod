@@ -1265,8 +1265,9 @@ void setStateOutputs(byte State) {
   if (CurrentTimer > 0) {
     CurrentTimer = CurrentTimer - 1; // Convert to 0 index
     GlobalTimersTriggered[CurrentTimer] = true;
+    GlobalTimerStart[CurrentTimer] = CurrentTime;
     if (GlobalTimerOnsetDelays[CurrentTimer] > 0){
-      GlobalTimerStart[CurrentTimer] = CurrentTime + GlobalTimerOnsetDelays[CurrentTimer];
+      GlobalTimerStart[CurrentTimer] += GlobalTimerOnsetDelays[CurrentTimer];
     } else {
       GlobalTimersActive[CurrentTimer] = true;
       setGlobalTimerChannel(CurrentTimer, 1);

@@ -109,27 +109,28 @@ if currentValue == BpodSystem.GUIData.ProtocolSelectorLastValue
         end
         loadProtocols;
     end
-    BpodSystem.GUIData.ProtocolSelectorLastValue = currentValue;
 else
     ProtocolName = String{currentValue};
-    % Make sure a default settings file exists
-    SettingsFolder = fullfile(BpodSystem.Path.DataFolder,BpodSystem.GUIData.DummySubjectString,ProtocolName, 'Session Settings');
-    if ~exist(SettingsFolder)
-        mkdir(SettingsFolder);
-    end
-    DefaultSettingsPath = fullfile(SettingsFolder,'DefaultSettings.mat');
-    % Ensure that a default settings file exists
-    if ~exist(DefaultSettingsPath)
-        ProtocolSettings = struct;
-        save(DefaultSettingsPath, 'ProtocolSettings')
-    end
-    
-    loadSubjects(ProtocolName);
-    loadSettings(ProtocolName, BpodSystem.GUIData.DummySubjectString);
-    UpdateDataFile(ProtocolName, BpodSystem.GUIData.DummySubjectString);
-    BpodSystem.Status.CurrentProtocolName = ProtocolName;
-end
+    if ProtocolName(1) ~= '<'
+        % Make sure a default settings file exists
+        SettingsFolder = fullfile(BpodSystem.Path.DataFolder,BpodSystem.GUIData.DummySubjectString,ProtocolName, 'Session Settings');
+        if ~exist(SettingsFolder)
+            mkdir(SettingsFolder);
+        end
+        DefaultSettingsPath = fullfile(SettingsFolder,'DefaultSettings.mat');
+        % Ensure that a default settings file exists
+        if ~exist(DefaultSettingsPath)
+            ProtocolSettings = struct;
+            save(DefaultSettingsPath, 'ProtocolSettings')
+        end
 
+        loadSubjects(ProtocolName);
+        loadSettings(ProtocolName, BpodSystem.GUIData.DummySubjectString);
+        UpdateDataFile(ProtocolName, BpodSystem.GUIData.DummySubjectString);
+        BpodSystem.Status.CurrentProtocolName = ProtocolName;
+    end
+end
+BpodSystem.GUIData.ProtocolSelectorLastValue = currentValue;
 
 
 function SubjectSelectorNavigate (~,~)

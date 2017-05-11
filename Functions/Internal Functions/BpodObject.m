@@ -291,7 +291,7 @@ classdef BpodObject < handle
                 obj.SerialPort.write('F', 'uint8');
                 obj.FirmwareBuild = obj.SerialPort.read(1, 'uint16');
                 obj.MachineType = obj.SerialPort.read(1, 'uint16');
-                obsoleteFirmware = [7 8 9 10 11];
+                obsoleteFirmware = [7 8 9 10 11 12];
                 if sum(obsoleteFirmware == obj.FirmwareBuild) > 0
                     obj.SerialPort.write('Z');
                     obj.SerialPort = []; % Trigger the ArCOM port's destructor function (closes and releases port)

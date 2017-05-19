@@ -18,7 +18,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
-// Bpod State Machine v 0.7.9
+// Bpod State Machine v 0.5.8
 // SYSTEM SETUP:
 //
 // IF COMPILING FOR Arduino DUE, Requires the DueTimer library from:
@@ -36,7 +36,7 @@
 
 // Set device type and version
 #define MachineType 1 // 1 = Bpod 0.5-0.8, 2 = Pocket State Machine
-#define FirmwareVersion 13
+#define FirmwareVersion 5
 
 // Set universal board parameters
 #define useStatusLED 1 // Set to 0 to disable the board's red/green/blue status LED

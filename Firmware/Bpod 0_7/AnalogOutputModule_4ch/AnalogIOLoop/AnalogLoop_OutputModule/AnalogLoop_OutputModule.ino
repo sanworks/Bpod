@@ -51,7 +51,7 @@ ArCOM Serial2COM(Serial2);
 void setup() {
   Serial2.begin(1312500); 
   Serial3.begin(1312500);
-  DAC.setRange(5); // rangeIndex 0 = '0V:5V', 1 = '0V:10V', 2 = '0V:12V', 3 = '-5V:5V', 4 = '-10V:10V', 5 = '-12V:12V'
+  DAC.setRange(3); // rangeIndex 0 = '0V:5V', 1 = '0V:10V', 2 = '0V:12V', 3 = '-5V:5V', 4 = '-10V:10V', 5 = '-12V:12V'
 }
 
 void loop() {
@@ -91,7 +91,7 @@ void loop() {
         }
         
         // Run a filter on samples (+ history if you recorded it) to extract behavior events
-
+        
         // Return behavior events to Bpod state machine. Discrete events are sent as Serial1COM.writeByte(myEvent), where myEvent is an event byte code.
         
         // Map new ADC samples to DAC output voltages. For this "hello world" example, the bits are copied directly from the ADC to the DAC

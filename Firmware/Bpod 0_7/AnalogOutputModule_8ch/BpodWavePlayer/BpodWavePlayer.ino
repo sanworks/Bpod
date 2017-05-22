@@ -37,7 +37,7 @@ char moduleName[] = "WavePlayer"; // Name of module for manual override UI and s
 // Parameters
 const byte nChannels = 8; // Number of analog output channels
 const int maxWaves = 64; // Maximum number of waveforms (used to set up data buffers and to ensure data file is large enough)
-const unsigned long bufSize = 640; // Buffer size (in samples). Larger buffers prevent underruns, but take up memory.
+const unsigned long bufSize = 1280; // Buffer size (in samples, note: 2 bytes/sample). Larger buffers prevent underruns, but take up memory.
                                     // Each wave in MaxWaves is allocated 1 buffer worth of sRAM (Teensy 3.6 total sRAM = 256k)
 const unsigned long maxWaveSize = 1000000; // Maximum number of samples per waveform
 const byte maxTriggerProfiles = 64; // Maximum number of trigger profiles (vectors of waves to play on each channel for different trigger bytes) 
@@ -97,6 +97,7 @@ unsigned short DACBits_ZeroVolts = 32768; // Code (in bits) for 0V. For bipolar 
 byte countdown2Play[nChannels] = {0}; // Set to 2 if a channel has been triggered, and needs to begin playback in 2 cycles. Set to 1 on next cycle, etc.
                                       // This ensures that a cycle burdened with serial reads and triggering logic does not also update the channel voltage.
                                       // The phenotype, if too few cycles are skipped, is a short first sample. 
+boolean dac2Active = true; // Set automatically to false if sampling rate is too high to support ch4-8
 
 // Communication variables
 const int BpodSerialBaudRate = 1312500; // Communication rate for Bpod UART channel
@@ -550,6 +551,11 @@ void handler(){ // The handler is triggered precisely every timerPeriod microsec
       if (opSource == 0) {
         USBCOM.readByteArray(timerPeriod.byteArray, 4);
         hardwareTimer.end();
+        if (timerPeriod.floatVal < 33) {
+          dac2Active = false;
+        } else {
+          dac2Active = true;
+        }
         hardwareTimer.begin(handler, timerPeriod.floatVal);
       }
       break;
@@ -754,43 +760,43 @@ void dacWrite() {
     SPI.transfer(dacBuffer,3);
     digitalWrite(SyncPin1,HIGH); 
   }
-  //digitalWrite(LDACPin1,LOW);
-
-  digitalWrite(LDACPin2,HIGH);
-  if (playing[4]) {
-    digitalWrite(SyncPin2,LOW);
-    dacBuffer[0] = 3;
-    dacBuffer[1] = dacValue.byteArray[9];
-    dacBuffer[2] = dacValue.byteArray[8];
-    SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin2,HIGH);
+  if (dac2Active) {
+    digitalWrite(LDACPin2,HIGH);
+    if (playing[4]) {
+      digitalWrite(SyncPin2,LOW);
+      dacBuffer[0] = 3;
+      dacBuffer[1] = dacValue.byteArray[9];
+      dacBuffer[2] = dacValue.byteArray[8];
+      SPI.transfer(dacBuffer,3);
+      digitalWrite(SyncPin2,HIGH);
+    }
+    if (playing[5]) {
+      digitalWrite(SyncPin2,LOW);
+      dacBuffer[0] = 2;
+      dacBuffer[1] = dacValue.byteArray[11];
+      dacBuffer[2] = dacValue.byteArray[10];
+      SPI.transfer(dacBuffer,3);
+      digitalWrite(SyncPin2,HIGH);
+    }
+    if (playing[6]) {
+      digitalWrite(SyncPin2,LOW);
+      dacBuffer[0] = 0;
+      dacBuffer[1] = dacValue.byteArray[13];
+      dacBuffer[2] = dacValue.byteArray[12];
+      SPI.transfer(dacBuffer,3);
+      digitalWrite(SyncPin2,HIGH);
+    }
+    if (playing[7]) {
+      digitalWrite(SyncPin2,LOW);
+      dacBuffer[0] = 1;
+      dacBuffer[1] = dacValue.byteArray[15];
+      dacBuffer[2] = dacValue.byteArray[14];
+      SPI.transfer(dacBuffer,3);
+      digitalWrite(SyncPin2,HIGH); 
+    }
+    digitalWrite(LDACPin2,LOW);
   }
-  if (playing[5]) {
-    digitalWrite(SyncPin2,LOW);
-    dacBuffer[0] = 2;
-    dacBuffer[1] = dacValue.byteArray[11];
-    dacBuffer[2] = dacValue.byteArray[10];
-    SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin2,HIGH);
-  }
-  if (playing[6]) {
-    digitalWrite(SyncPin2,LOW);
-    dacBuffer[0] = 0;
-    dacBuffer[1] = dacValue.byteArray[13];
-    dacBuffer[2] = dacValue.byteArray[12];
-    SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin2,HIGH);
-  }
-  if (playing[7]) {
-    digitalWrite(SyncPin2,LOW);
-    dacBuffer[0] = 1;
-    dacBuffer[1] = dacValue.byteArray[15];
-    dacBuffer[2] = dacValue.byteArray[14];
-    SPI.transfer(dacBuffer,3);
-    digitalWrite(SyncPin2,HIGH); 
-  }
-  digitalWrite(LDACPin1,LOW);
-  digitalWrite(LDACPin2,LOW);
+  digitalWrite(LDACPin1,LOW); 
 }
 
 void zeroDAC() {

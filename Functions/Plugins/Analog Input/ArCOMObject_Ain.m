@@ -109,7 +109,6 @@ classdef ArCOMObject_Ain < handle
                 end
             end
             obj.validDataTypes = {'char', 'uint8', 'uint16', 'uint32', 'int8', 'int16', 'int32'};
-            obj.Interface = 0;
             switch obj.Interface
                 case 0
                     obj.Port = serial(portString, 'BaudRate', 115200, 'Timeout', 1,'OutputBufferSize', 100000, 'InputBufferSize', 1000000, 'DataTerminalReady', 'on', 'tag', 'ArCOM');

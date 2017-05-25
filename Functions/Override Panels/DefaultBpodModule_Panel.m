@@ -10,6 +10,7 @@ BpodSystem.GUIData.InstructionFontSize = 8;
 if isunix
     BpodSystem.GUIData.InstructionFontSize = 7;
 end
+BpodSystem.GUIData.SelectedTermDisplayMode = 1;
 
 ModuleNumber = find(strcmp(ModuleName, BpodSystem.Modules.Name));
 
@@ -129,6 +130,8 @@ set(BpodSystem.GUIHandles.SerialTerminalMessageSelect(ModuleNumber), 'Value', 0)
 set(BpodSystem.GUIHandles.SerialTerminalCharSelect(ModuleNumber), 'Value', 0);
 set(BpodSystem.GUIHandles.SerialTerminalInput(ModuleNumber), 'String', ModeInstructions{1},...
     'ForegroundColor', [.5 .5 .5], 'FontSize', BpodSystem.GUIData.InstructionFontSize, 'Enable', 'off');
+BpodSystem.GUIData.SelectedTermDisplayMode = 2;
+ClearTerminal(ModuleNumber)
 
 function SelectCharmode(ModuleNumber)
 global BpodSystem
@@ -138,6 +141,8 @@ set(BpodSystem.GUIHandles.SerialTerminalMessageSelect(ModuleNumber), 'Value', 0)
 set(BpodSystem.GUIHandles.SerialTerminalCharSelect(ModuleNumber), 'Value', 1);
 set(BpodSystem.GUIHandles.SerialTerminalInput(ModuleNumber), 'String', ModeInstructions{2},...
     'FontSize', BpodSystem.GUIData.InstructionFontSize, 'ForegroundColor', [.5 .5 .5], 'Enable', 'off');
+BpodSystem.GUIData.SelectedTermDisplayMode = 1;
+ClearTerminal(ModuleNumber)
 
 function SelectMessagemode(ModuleNumber)
 global BpodSystem
@@ -148,6 +153,8 @@ set(BpodSystem.GUIHandles.SerialTerminalMessageSelect(ModuleNumber), 'Value', 1)
 set(BpodSystem.GUIHandles.SerialTerminalCharSelect(ModuleNumber), 'Value', 0);
 set(BpodSystem.GUIHandles.SerialTerminalInput(ModuleNumber), 'String', ModeInstructions{3},...
     'ForegroundColor', [.5 .5 .5], 'FontSize', BpodSystem.GUIData.InstructionFontSize, 'Enable', 'off');
+BpodSystem.GUIData.SelectedTermDisplayMode = 3;
+ClearTerminal(ModuleNumber)
 
 function ClearInstructions(ModuleNumber)
 global BpodSystem

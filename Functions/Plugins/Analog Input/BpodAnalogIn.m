@@ -305,7 +305,7 @@ classdef BpodAnalogIn < handle
         function stopLogging(obj)
             if obj.Initialized
                 obj.Port.write([obj.opMenuByte 'L' 0], 'uint8');
-                obj.confirmTransmission('start logging');
+                obj.confirmTransmission('stop logging');
                 obj.Status.Logging = 0;
             end
         end
@@ -517,7 +517,9 @@ classdef BpodAnalogIn < handle
     methods (Access = private) 
         function confirmTransmission(obj,paramName)
             Confirmed = obj.Port.read(1, 'uint8');
-            if Confirmed ~= 1
+            if Confirmed == 0
+                error(['Error setting ' paramName ': the module denied your request.'])
+            elseif Confirmed ~= 1
                 error(['Error setting ' paramName ': module did not acknowledge new value.']);
             end
         end

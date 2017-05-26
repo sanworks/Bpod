@@ -1,6 +1,26 @@
+/*
+  ----------------------------------------------------------------------------
 
+  This file is part of the Sanworks Bpod repository
+  Copyright (C) 2017 Sanworks LLC, Sound Beach, New York, USA
+
+  ----------------------------------------------------------------------------
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, version 3.
+
+  This program is distributed  WITHOUT ANY WARRANTY and without even the
+  implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
 // Analog Module firmware v4.0.0
 // Federico Carnevale, October 2016
+// Revised by Josh Sanders, May 2017
 
 // ** DEPENDENCIES YOU NEED TO INSTALL FIRST **
 
@@ -8,10 +28,15 @@
 // Download it from here: https://github.com/greiman/SdFat
 // and copy it to your /Arduino/Libraries folder.
 
-#include "ArCOM.h"
-#include "AD7327.h"
+// ALSO Requires modifications to Teensy core files:
+// In the folder /arduino-1.8.X/hardware/teensy/avr/cores/teensy3, modify the following line in each of the 5 files listed below:
+// #define SERIAL1_RX_BUFFER_SIZE 64  --> #define SERIAL1_RX_BUFFER_SIZE 256
+// IN FILES: serial1.c, serial2.c, serial3.c
+
+#include "ArCOM.h" // A wrapper for Arduino serial interfaces. See https://sites.google.com/site/sanworksdocs/arcom
+#include "AD7327.h" // Library for the AD7327 Analog to digital converter IC
 #include <SPI.h>
-#include <SdFat.h>
+#include <SdFat.h> // Library for microSD
 SdFatSdioEX SD;
 
 #define SERIAL_TX_BUFFER_SIZE 256
@@ -21,15 +46,15 @@ SdFatSdioEX SD;
 unsigned long FirmwareVersion = 1;
 char moduleName[] = "AnalogIn"; // Name of module for manual override UI and state machine assembler
 
-AD7327 AD(39); // ADC ChipSelect
-byte adcChipSelectPin = 39; //DISCARD
+AD7327 AD(39); // Create AD, an AD7327 ADC object.
 
-ArCOM USBCOM(SerialUSB); // Creates an ArCOM object called USBCOM, wrapping SerialUSB
-ArCOM StateMachineCOM(Serial3); // Creates an ArCOM object called StateMachineCOM
-ArCOM OutputStreamCOM(Serial2);
+ArCOM USBCOM(SerialUSB); // Creates an ArCOM object called USBCOM, wrapping SerialUSB. See https://sites.google.com/site/sanworksdocs/arcom
+ArCOM StateMachineCOM(Serial3); // Creates an ArCOM object for the state machine
+ArCOM OutputStreamCOM(Serial2); // Creates an ArCOM object for the output stream
 
-// Variables that define other hardware pins
-byte DebugPin = 18; // Teensy LED
+// Digital i/o pins available from side of enclosure (not currently used; can be configured as an I2C interface)
+byte DigitalPin1 = 18;
+byte DigitalPin2 = 19;
 
 // System objects
 SPISettings ADCSettings(10000000, MSBFIRST, SPI_MODE2);
@@ -39,15 +64,15 @@ File DataFile; // File on microSD card, to store waveform data
 // Op menu variable
 byte opCode = 0; // Serial inputs access an op menu. The op code byte stores the intended operation.
 byte opSource = 0; // 0 = op from USB, 1 = op from UART1, 2 = op from UART2. More op code menu options are exposed for USB.
-boolean newOpCode = 0; // true if an opCode was read from one of the ports
-byte OpMenuByte = 213; // This byte must be the first byte in any serial transmission. Reduces the probability of interference from port-scanning software
+boolean newOpCode = 0; // this flag is true if an opCode was read from one of the ports
+byte OpMenuByte = 213; // This byte must be the first byte in any USB serial transmission. Reduces the probability of interference from port-scanning software
 byte inByte = 0; // General purpose temporary byte
 
 // Channel counts
-const byte nPhysicalChannels = 8;
-byte nActiveChannels = 8;
+const byte nPhysicalChannels = 8; // Number of physical channels on device
+byte nActiveChannels = 8; // Number of channels currently being read (consecutive, starting at ch1)
 
-// Actions
+// State Flags
 boolean StreamSignalToUSB = false; // Stream to USB
 boolean StreamSignalToModule = false; // Send adc reads to output or DDS module through serial port
 boolean LoggingDataToSD = false; // Logs active channels to SD card
@@ -77,28 +102,27 @@ uint32_t nRemainderBytes = 0; // Number of bytes remaining after full transmissi
 const uint32_t sdReadBufferSize = 2048; // in bytes
 uint8_t sdReadBuffer[sdReadBufferSize] = {0};
 const uint32_t sdWriteBufferSize = 2048; // in bytes
-uint16_t sdWriteBuffer[nPhysicalChannels*sdWriteBufferSize*2] = {0};
+uint16_t sdWriteBuffer[nPhysicalChannels*sdWriteBufferSize*2] = {0}; // These two buffers store data to be written to microSD. 
+                                                                     // One is dumped to microSD in the main loop,
+                                                                     // while the other is filled in the timer callback.
 uint16_t sdWriteBuffer2[nPhysicalChannels*sdWriteBufferSize*2] = {0};
 uint32_t writeBufferPos = 0;
 uint32_t writeBuffer2Pos = 0;
-byte currentBuffer = 0;
+byte currentBuffer = 0; // Current buffer being written to microSD
 
 
 // Other variables
-uint16_t adcDigitalValue = 0;
-uint32_t nSamplesAcquired = 0;
-uint32_t maxSamplesToAcquire = 0; // 0 = infinite
-byte DPstate = 0;
-boolean writeFlag = false;
+uint32_t nSamplesAcquired = 0; // Number of samples acquired since logging started
+uint32_t maxSamplesToAcquire = 0; // maximum number of samples to acquire on startLogging command. 0 = infinite
+boolean writeFlag = false; // True if a write buffer contains samples to be written to SD
 
 // Error messages stored in flash.
 #define error(msg) sd.errorHalt(F(msg))
 
 void setup() {
-  pinMode(DebugPin, OUTPUT);
-  digitalWrite(DebugPin, HIGH);
-  pinMode(19, OUTPUT);
-  Serial2.begin(2457600); 
+  pinMode(DigitalPin1, OUTPUT);
+  digitalWrite(DigitalPin1, HIGH); // This allows a potentiometer to be powered from the board, for coarse diagnostics
+  Serial2.begin(7372800); // Select the highest value your CAT5e/CAT6 cable supports without dropped bytes: 1312500, 2457600, 3686400, 7372800
   Serial3.begin(1312500);
   SPI.begin();
   SD.begin(); // Initialize microSD card
@@ -110,11 +134,11 @@ void setup() {
 
 
 void loop() {
-  if (writeFlag) {
-    if (currentBuffer == 0) {
-      currentBuffer = 1;
-      DataFile.write(sdWriteBuffer, writeBufferPos*2);
-      writeBufferPos = 0;
+  if (writeFlag) { // If data is available to be written to microSD
+    if (currentBuffer == 0) { // If the data was loaded into buffer 0
+      currentBuffer = 1; // Make the current buffer = 1
+      DataFile.write(sdWriteBuffer, writeBufferPos*2); // Write to microSD
+      writeBufferPos = 0; // Reset buffer write position
     } else {
       currentBuffer = 0;
       DataFile.write(sdWriteBuffer2, writeBuffer2Pos*2);
@@ -125,9 +149,9 @@ void loop() {
 }
 
 void handler(void) {
-  if (StateMachineCOM.available() > 0) {
+  if (StateMachineCOM.available() > 0) { // If bytes arrived from the state machine
     opCode = StateMachineCOM.readByte(); // Read in an op code
-    opSource = 1; // UART 1
+    opSource = 1; // 0 = USB, 1 = State machine, 2 = output stream (DDS, Analog output module, etc)
     newOpCode = true;
   } else if (OutputStreamCOM.available() > 0) {
     opCode = OutputStreamCOM.readByte();
@@ -199,9 +223,6 @@ void handler(void) {
             }
           break;
         }
-//        if (opSource == 0) {
-//          USBCOM.writeByte(1); // Send confirm byte
-//        }
       break;
 
       case 'E': // Start/Stop threshold event detection + transmission
@@ -252,19 +273,31 @@ void handler(void) {
 
       case 'R': // Select ADC Voltage range for each channel
           if (opSource == 0) {
-            USBCOM.readByteArray(voltageRanges, nPhysicalChannels);
-            for (int i = 0; i < nPhysicalChannels; i++) {
-              AD.setRange(i, voltageRanges[i]);
+            if (!LoggingDataToSD){
+              USBCOM.readByteArray(voltageRanges, nPhysicalChannels);
+              for (int i = 0; i < nPhysicalChannels; i++) {
+                AD.setRange(i, voltageRanges[i]);
+              }
+              USBCOM.writeByte(1); // Send confirm byte
+            } else {
+              for (int i = 0; i < nPhysicalChannels; i++) { // Clear input buffer (more elegantly in future ArCOM versions)
+                USBCOM.readByte();
+              }
+              USBCOM.writeByte(0); // Send error byte
             }
-            USBCOM.writeByte(1); // Send confirm byte
           }
       break;
 
       case 'A': // Set max number of actively sampled channels
         if (opSource == 0) {
-          nActiveChannels = USBCOM.readByte();
-          AD.setNchannels(nActiveChannels);
-          USBCOM.writeByte(1); // Send confirm byte
+          if (!LoggingDataToSD) {
+            nActiveChannels = USBCOM.readByte();
+            AD.setNchannels(nActiveChannels);
+            USBCOM.writeByte(1); // Send confirm byte
+          } else {
+            USBCOM.readByte();
+            USBCOM.writeByte(0); // Send error byte
+          }
         }
       break;
 
@@ -319,18 +352,28 @@ void handler(void) {
 
       case 'F': // Change sampling frequency
           if (opSource == 0) {
-            samplingRate = USBCOM.readUint32();
-            hardwareTimer.end();
-            timerPeriod = (1/(double)samplingRate)*1000000;
-            hardwareTimer.begin(handler, timerPeriod);
-            USBCOM.writeByte(1);
+            if (!LoggingDataToSD) {
+              samplingRate = USBCOM.readUint32();
+              hardwareTimer.end();
+              timerPeriod = (1/(double)samplingRate)*1000000;
+              hardwareTimer.begin(handler, timerPeriod);
+              USBCOM.writeByte(1); // Confirm byte
+            } else {
+              USBCOM.readUint32();
+              USBCOM.writeByte(0); // Error byte
+            }
           }
       break;
 
       case 'W': // Set maximum number of samples to acquire on command to log data
         if (opSource == 0) {
-          maxSamplesToAcquire = USBCOM.readUint32();
-          USBCOM.writeByte(1);
+          if (!LoggingDataToSD) {
+            maxSamplesToAcquire = USBCOM.readUint32();
+            USBCOM.writeByte(1);
+          } else {
+            USBCOM.readUint32();
+            USBCOM.writeByte(0); // Error byte
+          }
         }
       break;
     }// end switch(opCode)
@@ -376,8 +419,6 @@ void handler(void) {
   
   if (LoggingDataToSD) {
     LogData();
-    DPstate = 1-DPstate;
-    digitalWrite(19, DPstate);
   }
     
   if (StreamSignalToUSB) { // Stream data to USB

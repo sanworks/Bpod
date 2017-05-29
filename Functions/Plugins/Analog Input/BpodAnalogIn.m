@@ -27,11 +27,10 @@ classdef BpodAnalogIn < handle
         Status % Struct containing status of ongoing ops (logging, streaming, etc)
         nActiveChannels % Number of channels to sample (consecutive, beginning with channel 1)
         SamplingRate % 1Hz-50kHz, affects all channels
-        VoltageRange % A cell array of strings indicating channel range for 12-bits. Valid ranges are in ValidRanges (below)
+        InputRange % A cell array of strings indicating voltage range for 12-bit conversion. Valid ranges are in ValidRanges (below)
         Thresholds % Threshold (V) for each channel. Analog signal crossing the threshold generates an event.
-        ResetValues % Voltage must cross ResetValue (V) before another threshold event can occur
+        ResetVoltages % Voltage must cross ResetValue (V) before another threshold event can occur
         SMeventsEnabled % Logical vector indicating channels that generate events
-        Stream2USB % Logical vector indicating channels to stream to USB (raw data)
         Stream2Module % Logical vector indicating channels to stream to output module (raw data)
         nSamplesToLog = Inf; % Number of samples to log on trigger, 0 = infinite
     end
@@ -48,11 +47,12 @@ classdef BpodAnalogIn < handle
         opMenuByte = 213; % Byte code to access op menu
         RangeMultipliers = [20 10 5 10];
         RangeOffsets = [10 5 2.5 0];
-        VoltageRangeLimits = [-10 10; -5 5; -2.5 2.5; 0 10];
+        InputRangeLimits = [-10 10; -5 5; -2.5 2.5; 0 10];
         RangeIndex = ones(1,8); % Integer code for voltage range (position in ValidRanges vector above)
         nPhysicalChannels = 8; % Number of physical channels
         RootPath = fileparts(which('AnalogInObject'));
         FirmwareVersion = 0;
+        Stream2USB % Logical vector indicating channels to stream to USB (raw data)
         Initialized = 0; % Set to 1 after object constructor is done running
         Streaming = 0; % Set to 1 if the oscope display is streaming
         chBits = (2^13); % Bit width of ADC
@@ -76,7 +76,7 @@ classdef BpodAnalogIn < handle
                 error(['Error: The serial port (' portString ') returned an unexpected handshake signature.'])
             end
             % Set defaults (also set in parallel on device)
-            obj.VoltageRange  = repmat(obj.ValidRanges(1), 1, obj.nPhysicalChannels);
+            obj.InputRange  = repmat(obj.ValidRanges(1), 1, obj.nPhysicalChannels);
             obj.SamplingRate = 1000;
             obj.Status = struct;
             obj.Status.Logging = 0;
@@ -85,7 +85,7 @@ classdef BpodAnalogIn < handle
             obj.Status.ModuleStreamEnabled = 0;
             obj.nActiveChannels = obj.nPhysicalChannels;            
             obj.Thresholds = ones(1,obj.nPhysicalChannels)*10; % Initialized to max voltage of default range
-            obj.ResetValues = ones(1,obj.nPhysicalChannels)*-10;
+            obj.ResetVoltages = ones(1,obj.nPhysicalChannels)*-10;
             obj.SMeventsEnabled = zeros(1,obj.nPhysicalChannels);
             obj.Stream2USB = zeros(1,obj.nPhysicalChannels);
             obj.Stream2Module = zeros(1,obj.nPhysicalChannels);
@@ -94,10 +94,10 @@ classdef BpodAnalogIn < handle
             obj.About.GUIhandles = 'A struct containing handles of the UI';
             obj.About.Status = 'A struct containing process status: logging, streaming to output module, returning threshold events to state machine';
             obj.About.SamplingRate = 'Sampling rate for all channels (in Hz)';
-            obj.About.VoltageRange = 'Voltage range mapped to 12 bits of each channel. Valid ranges are in .ValidRanges';
+            obj.About.InputRange = 'Voltage range mapped to 12 bits of each channel. Valid ranges are in .ValidRanges';
             obj.About.nActiveChannels = 'Number of channels to read, beginning with channel 1. Fewer channels -> faster sampling.';
             obj.About.Thresholds = 'Threshold, in volts, generates an event when crossed. The event will be sent to the state machine if SendBpodEvents was called earlier.';
-            obj.About.ResetValues = 'Threshold reset voltages for each channel. Voltage must go below this value to enable the next event.';
+            obj.About.ResetVoltages = 'Threshold reset voltages for each channel. Voltage must go below this value to enable the next event.';
             obj.About.SMeventsEnabled = 'Logical vector indicating channels that generate threshold crossing events';
             obj.About.Stream2USB = 'Logical vector indicating which channels stream raw data to USB.';
             obj.About.Stream2Module = 'Logical vector indicating which channels stream raw data to output module.';
@@ -144,29 +144,29 @@ classdef BpodAnalogIn < handle
             obj.nActiveChannels = nChannels;
         end
         
-        function set.VoltageRange(obj, value)          
+        function set.InputRange(obj, value)          
             %1: '-10V - 10V' 2: '-5V - 5V' 3: '-2.5V - 2.5V' 4: '0V - 10V' 
             if obj.Initialized
-                VoltageRangeIndex = ones(1,obj.nPhysicalChannels);
+                InputRangeIndex = ones(1,obj.nPhysicalChannels);
                 for i = 1:obj.nPhysicalChannels
                     RangeString = value{i};
                     RangeIndex = find(strcmp(RangeString, obj.ValidRanges),1);
                     if isempty(RangeIndex)
                         error(['Invalid range specified: ' RangeString '. Valid ranges are: ' obj.ValidRanges]);
                     end
-                    VoltageRangeIndex(i) = RangeIndex;
+                    InputRangeIndex(i) = RangeIndex;
                 end
-                obj.Port.write([obj.opMenuByte 'R' VoltageRangeIndex-1], 'uint8');
+                obj.Port.write([obj.opMenuByte 'R' InputRangeIndex-1], 'uint8');
                 obj.confirmTransmission('voltage range');
                 oldRangeIndex = obj.RangeIndex;
-                obj.RangeIndex = VoltageRangeIndex;
+                obj.RangeIndex = InputRangeIndex;
                 % Set thresholds and reset values (expressed in voltages) to values in new range. 
                 % Thresholds that are out of range are set to maximum range.
                 NewThresholds = obj.Thresholds;
-                NewResets = obj.ResetValues;
+                NewResets = obj.ResetVoltages;
                 for i = 1:obj.nPhysicalChannels
-                    ThisRangeMin = obj.VoltageRangeLimits(obj.RangeIndex(i),1);
-                    ThisRangeMax = obj.VoltageRangeLimits(obj.RangeIndex(i),2);
+                    ThisRangeMin = obj.InputRangeLimits(obj.RangeIndex(i),1);
+                    ThisRangeMax = obj.InputRangeLimits(obj.RangeIndex(i),2);
                     if NewThresholds(i) < ThisRangeMin
                         NewThresholds(i) = ThisRangeMin;
                     elseif NewThresholds(i) > ThisRangeMax
@@ -177,27 +177,27 @@ classdef BpodAnalogIn < handle
                     elseif NewResets(i) > ThisRangeMax
                         NewResets(i) = ThisRangeMax;
                     end
-                    if obj.Thresholds(i) == obj.VoltageRangeLimits(oldRangeIndex(i), 2)
+                    if obj.Thresholds(i) == obj.InputRangeLimits(oldRangeIndex(i), 2)
                         NewThresholds(i) = ThisRangeMax;
                     end
-                    if obj.ResetValues(i) == obj.VoltageRangeLimits(oldRangeIndex(i), 1)
+                    if obj.ResetVoltages(i) == obj.InputRangeLimits(oldRangeIndex(i), 1)
                         NewResets(i) = ThisRangeMin;
                     end
                 end
-                 obj.VoltageRange = value;
+                 obj.InputRange = value;
                  % Reset and threshold must be set simultanesously, since they
                  % were changed simultaneously. Instead of calling
-                 % set.Thresholds, and set.ResetValues, the next 4 lines do both at once.
+                 % set.Thresholds, and set.ResetVoltages, the next 4 lines do both at once.
                  ResetValueBits = obj.Volts2Bits(NewResets, obj.RangeIndex);
                  ThresholdBits = obj.Volts2Bits(NewThresholds, obj.RangeIndex);
                  obj.Port.write([obj.opMenuByte 'T'], 'uint8', [ThresholdBits ResetValueBits], 'uint16');
                  obj.confirmTransmission('thresholds');
                  obj.Initialized = 0; % Disable updating to change the object
                  obj.Thresholds = NewThresholds;
-                 obj.ResetValues = NewResets;
+                 obj.ResetVoltages = NewResets;
                  obj.Initialized = 1;
             else
-                obj.VoltageRange = value;
+                obj.InputRange = value;
             end
             
         end
@@ -205,12 +205,12 @@ classdef BpodAnalogIn < handle
         function set.Thresholds(obj, value)
             if obj.Initialized
                 for i = 1:obj.nPhysicalChannels
-                    if value(i) < obj.VoltageRangeLimits(obj.RangeIndex(i),1) || value(i) > obj.VoltageRangeLimits(obj.RangeIndex(i),2)
-                        error(['Error setting threshold: the threshold for channel ' num2str(i) ' is not within the channel''s voltage range: ' obj.VoltageRange{i}])
+                    if value(i) < obj.InputRangeLimits(obj.RangeIndex(i),1) || value(i) > obj.InputRangeLimits(obj.RangeIndex(i),2)
+                        error(['Error setting threshold: the threshold for channel ' num2str(i) ' is not within the channel''s voltage range: ' obj.InputRange{i}])
                     end
                 end
                 %Rescale thresholds according to voltage range.
-                ResetValueBits = obj.Volts2Bits(obj.ResetValues, obj.RangeIndex);
+                ResetValueBits = obj.Volts2Bits(obj.ResetVoltages, obj.RangeIndex);
                 ThresholdBits = obj.Volts2Bits(value, obj.RangeIndex);
                 obj.Port.write([obj.opMenuByte 'T'], 'uint8', [ThresholdBits ResetValueBits], 'uint16');
                 obj.confirmTransmission('thresholds');
@@ -218,11 +218,11 @@ classdef BpodAnalogIn < handle
             obj.Thresholds = value;
         end
 
-        function set.ResetValues(obj, value)
+        function set.ResetVoltages(obj, value)
             if obj.Initialized
                 for i = 1:obj.nPhysicalChannels
-                    if value(i) < obj.VoltageRangeLimits(obj.RangeIndex(i),1) || value(i) > obj.VoltageRangeLimits(obj.RangeIndex(i),2)
-                        error(['Error setting threshold reset voltage: the value for channel ' num2str(i) ' is not within the channel''s voltage range: ' obj.VoltageRange{i}])
+                    if value(i) < obj.InputRangeLimits(obj.RangeIndex(i),1) || value(i) > obj.InputRangeLimits(obj.RangeIndex(i),2)
+                        error(['Error setting threshold reset voltage: the value for channel ' num2str(i) ' is not within the channel''s voltage range: ' obj.InputRange{i}])
                     end
                 end
                 %Rescale thresholds according to voltage range.
@@ -231,7 +231,7 @@ classdef BpodAnalogIn < handle
                 obj.Port.write([obj.opMenuByte 'T'], 'uint8', [ThresholdBits ResetValueBits], 'uint16');
                 obj.confirmTransmission('reset values');
             end
-            obj.ResetValues = value;
+            obj.ResetVoltages = value;
         end
         
         function set.SMeventsEnabled(obj, value)
@@ -278,7 +278,7 @@ classdef BpodAnalogIn < handle
             obj.Status.USBStreamEnabled = 0;
         end
         
-        function startEventReporting(obj)
+        function startReportingEvents(obj)
             if obj.Initialized
                 obj.Port.write([obj.opMenuByte 'E' 1 1], 'uint8');
                 obj.confirmTransmission('event reporting');
@@ -286,7 +286,7 @@ classdef BpodAnalogIn < handle
             obj.Status.EventReporting = 1;
         end
         
-        function stopEventReporting(obj)
+        function stopReportingEvents(obj)
             if obj.Initialized
                 obj.Port.write([obj.opMenuByte 'E' 1 0], 'uint8');
                 obj.confirmTransmission('event reporting');
@@ -422,7 +422,7 @@ classdef BpodAnalogIn < handle
                 ThreshY = ((obj.Thresholds(i)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
                 obj.UIhandles.ThresholdLine(i) = line([0 obj.UIhandles.nXDivisions],[ThreshY,ThreshY],...
                 'Color', LineColors{i}, 'LineStyle', ':', 'Visible', VisibilityVec{obj.SMeventsEnabled(i)+1});
-                ResetY = ((obj.ResetValues(i)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
+                ResetY = ((obj.ResetVoltages(i)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
                 obj.UIhandles.ResetLine(i) = line([0 obj.UIhandles.nXDivisions],[ResetY,ResetY],...
                 'Color', ResetLineColors{i}, 'LineStyle', ':', 'Visible', VisibilityVec{obj.SMeventsEnabled(i)+1});
             end
@@ -495,7 +495,7 @@ classdef BpodAnalogIn < handle
                 'String',num2str(obj.Thresholds(i)), 'enable', EnableStrings{obj.SMeventsEnabled(i)+1});
                 obj.UIhandles.resetSet(i) = uicontrol('Style', 'edit', 'Position', [960 YPos 55 20], 'FontSize', 10,...
                 'BackgroundColor', [0.8 0.8 0.8], 'FontWeight', 'bold', 'Callback',@(h,e)obj.UIsetReset(i),...
-                'String',num2str(obj.ResetValues(i)), 'enable', EnableStrings{obj.SMeventsEnabled(i)+1});
+                'String',num2str(obj.ResetVoltages(i)), 'enable', EnableStrings{obj.SMeventsEnabled(i)+1});
                 YPos= YPos - 30;
             end
             set(obj.UIhandles.chanEnable(1), 'Value', 1);
@@ -538,7 +538,7 @@ classdef BpodAnalogIn < handle
             MaxVolts = currentVoltDivValue*(obj.UIhandles.nYDivisions); HalfMax = MaxVolts/2;  
             ThreshY = ((obj.Thresholds(chan)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
             set(obj.UIhandles.ThresholdLine(chan), 'YData', [ThreshY,ThreshY]);
-            ResetY = ((obj.ResetValues(chan)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
+            ResetY = ((obj.ResetVoltages(chan)+HalfMax)/MaxVolts)*obj.UIhandles.nYDivisions;
             set(obj.UIhandles.ResetLine(chan), 'YData', [ResetY,ResetY]);
         end
         function bits = Volts2Bits(obj, VoltVector, RangeIndexes)
@@ -726,9 +726,9 @@ classdef BpodAnalogIn < handle
                 obj.updateThresholdLine(chan);
             end
             if sum(obj.SMeventsEnabled) > 0
-                obj.startEventReporting;
+                obj.startReportingEvents;
             else
-                obj.stopEventReporting;
+                obj.stopReportingEvents;
             end
             EnableStrings = {'off', 'on'};
             set(obj.UIhandles.thresholdSet(chan), 'enable', EnableStrings{value+1});
@@ -741,9 +741,9 @@ classdef BpodAnalogIn < handle
         function UIsetRange(obj, chan)
             obj.stopUIStream;
             value = get(obj.UIhandles.rangeSelect(chan), 'Value');
-            obj.VoltageRange{chan} = obj.ValidRanges{value};
+            obj.InputRange{chan} = obj.ValidRanges{value};
             set(obj.UIhandles.thresholdSet(chan), 'String', num2str(obj.Thresholds(chan)));
-            set(obj.UIhandles.resetSet(chan), 'String', num2str(obj.ResetValues(chan)));
+            set(obj.UIhandles.resetSet(chan), 'String', num2str(obj.ResetVoltages(chan)));
             if obj.Streaming
                 obj.startUSBStream;
                 start(obj.Timer);
@@ -754,8 +754,8 @@ classdef BpodAnalogIn < handle
             newThresholdstr = get(obj.UIhandles.thresholdSet(chan), 'String');
             newThreshold = str2double(newThresholdstr);
             thisChannelRange = obj.RangeIndex(chan);
-            thisChannelMin = obj.VoltageRangeLimits(thisChannelRange, 1);
-            thisChannelMax = obj.VoltageRangeLimits(thisChannelRange, 2);
+            thisChannelMin = obj.InputRangeLimits(thisChannelRange, 1);
+            thisChannelMax = obj.InputRangeLimits(thisChannelRange, 2);
             ValidThreshold = 0;
             if ~isnan(newThreshold)
                 if (newThreshold >= thisChannelMin) && (newThreshold <= thisChannelMax) && isreal(newThreshold)
@@ -777,18 +777,18 @@ classdef BpodAnalogIn < handle
             newThresholdstr = get(obj.UIhandles.resetSet(chan), 'String');
             newThreshold = str2double(newThresholdstr);
             thisChannelRange = obj.RangeIndex(chan);
-            thisChannelMin = obj.VoltageRangeLimits(thisChannelRange, 1);
-            thisChannelMax = obj.VoltageRangeLimits(thisChannelRange, 2);
+            thisChannelMin = obj.InputRangeLimits(thisChannelRange, 1);
+            thisChannelMax = obj.InputRangeLimits(thisChannelRange, 2);
             ValidThreshold = 0;
             if ~isnan(newThreshold)
                 if (newThreshold >= thisChannelMin) && (newThreshold <= thisChannelMax) && isreal(newThreshold)
-                    obj.ResetValues(chan) = newThreshold;
+                    obj.ResetVoltages(chan) = newThreshold;
                     ValidThreshold = 1;
                     obj.updateThresholdLine(chan);
                 end
             end
             if ~ValidThreshold
-               set(obj.UIhandles.resetSet(chan), 'String', num2str(obj.ResetValues(chan))); 
+               set(obj.UIhandles.resetSet(chan), 'String', num2str(obj.ResetVoltages(chan))); 
             end
             if obj.Streaming
                 obj.startUSBStream;
